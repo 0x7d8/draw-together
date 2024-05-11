@@ -1,0 +1,18 @@
+{
+  "version": "1.0.0",
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc && cd lib && node index && cd ..",
+    "prod": "node lib/index.js"
+  },
+  "dependencies": {
+    "@rjweb/runtime-node": "^1.1.0",
+    "@rjweb/utils": "^1.12.13",
+    "rjweb-server": "^9.5.1"
+  },
+  "devDependencies": {
+    "@types/node": "^18.19.33",
+    "typescript": "^5.4.5"
+  }
+}

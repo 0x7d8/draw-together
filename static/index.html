@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Draw Application</title>
+	<meta name="darkreader-lock">
+	<style>
+		html, body {
+			margin: 0;
+			padding: 0;
+			overflow: hidden;
+		}
+		canvas {
+			margin-top: 50px;
+			display: block;
+		}
+
+		#bar {
+			position: absolute;
+			display: flex;
+			flex-direction: row;
+			width: 100%;
+			height: 50px;
+			background: chocolate;
+			padding: 3px;
+		}
+
+		* {
+			font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+		}
+
+		h1 {
+			margin: auto;
+			color: white;
+		}
+
+		#flex-me-away {
+			display: flex;
+			flex-direction: column;
+		}
+
+		.stat {
+			margin: 0;
+			margin-right: 10px;
+			text-align: right;
+			color: white;
+		}
+
+		span {
+			z-index: 100;
+			position: absolute;
+			color: black;
+			pointer-events: none;
+		}
+	</style>
+</head>
+<body>
+	<span hidden style="top: 0; left: 0;">
+		<svg xmlns="http://www.w3.org/2000/svg"  width="30"  height="30"  viewBox="0 0 30 30"  fill="currentColor"  class="icon icon-tabler icons-tabler-filled icon-tabler-trash"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M20 6a1 1 0 0 1 .117 1.993l-.117 .007h-.081l-.919 11a3 3 0 0 1 -2.824 2.995l-.176 .005h-8c-1.598 0 -2.904 -1.249 -2.992 -2.75l-.005 -.167l-.923 -11.083h-.08a1 1 0 0 1 -.117 -1.993l.117 -.007h16z" /><path d="M14 2a2 2 0 0 1 2 2a1 1 0 0 1 -1.993 .117l-.007 -.117h-4l-.007 .117a1 1 0 0 1 -1.993 -.117a2 2 0 0 1 1.85 -1.995l.15 -.005h4z" /></svg>
+	</span>
+	<div id="bar">
+		<h1>draw together!</h1>
+		<div id="flex-me-away">
+			<p id="messages" class="stat">0 Messages</p>
+			<p id="bytes" class="stat">0.00 KB</p>
+		</div>
+	</div>
+	<canvas id="canvas"></canvas>
+
+	<script>
+		let messages = 0, bytes = 0
+
+		fetch('/history')
+			.then((res) => res.arrayBuffer())
+			.then((buf) => new Uint8Array(buf))
+			.then((arr) => {
+				const seperator = [0x69, 0x62, 0x64, 0x69]
+
+				let startIndex = 0
+				let endIndex = findIndex(arr, seperator)
+				while (endIndex !== -1) {
+					const data = arr.subarray(startIndex, endIndex)
+					if (data.byteLength > 1) {
+						const [ type, x, y, color ] = fromFormat(data)
+						messages++
+						bytes += data.byteLength
+
+						draw(x, y, color, type)
+					}
+
+					startIndex = endIndex + seperator.length
+					endIndex = findIndex(arr, seperator, startIndex)
+				}
+
+				function findIndex(arr, searchElement, fromIndex = 0) {
+					for (let i = fromIndex; i < arr.length; i++) {
+						if (arr[i] === searchElement[0]) {
+							let found = true
+							for (let j = 1; j < searchElement.length; j++) {
+								if (arr[i + j] !== searchElement[j]) {
+									found = false
+									break
+								}
+							}
+
+							if (found) {
+								return i
+							}
+						}
+					}
+
+					return -1
+				}
+			})
+
+		setInterval(() => {
+			document.getElementById('messages').innerText = `${messages} Messages`
+			document.getElementById('bytes').innerText = `${Math.floor(bytes / 1024).toFixed(2)} KB`
+		}, 100)
+
+		const colors = Array.from({ length: 256 }, (_, i) => {
+			let r = 0, g = 0, b = 0
+
+			if (i % 3 === 0) {
+				r = i
+				g = Math.floor(i / 2)
+				b = Math.floor(g / 2)
+			} else if (i % 3 === 1) {
+				g = i
+				r = Math.floor(i / 2)
+				b = Math.floor(r / 2)
+			} else {
+				b = i
+				g = Math.floor(i / 2)
+				r = Math.floor(g / 2)
+			}
+
+			return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`
+		})
+
+		const types = [
+			'draw',
+			'erase'
+		]
+
+		function toFormat(type, x, y) {
+			const uint8X = new Uint8Array([x & 0xFF, (x >> 8) & 0xFF])
+			const uint8Y = new Uint8Array([y & 0xFF, (y >> 8) & 0xFF])
+
+			const buffer = new Uint8Array([
+				types.findIndex((v) => v === type),
+				...uint8X,
+				...uint8Y
+			])
+
+			return buffer
+		}
+
+		function fromFormat(buffer) {
+			const type = buffer[0]
+			const uint8Color = buffer[5]
+			const color = colors[uint8Color]
+
+			const x = buffer[1] | (buffer[2] << 8)
+			const y = buffer[3] | (buffer[4] << 8)
+
+			if (!types[type] || !x || !y || !color) throw 'Invalid Format'
+
+			return [types[type], x, y, color]
+		}
+
+		/** @type {HTMLCanvasElement} */
+		var canvas = document.getElementById('canvas')
+		canvas.width = window.innerWidth
+		canvas.height = window.innerHeight - 50
+
+		var websocket = new WebSocket('wss://8000.webhook.pet')
+		var id = 0
+
+		websocket.addEventListener('message', async(e) => {
+			const ab = await e.data.arrayBuffer()
+
+			messages++
+			bytes += ab.byteLength
+
+			const [ type, x, y, color ] = fromFormat(new Uint8Array(ab))
+
+			draw(x, y, color, type)
+		})
+
+		/** @type {'draw' | 'erase'} */
+		let action = 'draw'
+
+		function draw(x, y, _color, type) {
+			var ctx = canvas.getContext('2d')
+			if (type === 'draw') {
+				ctx.fillStyle = _color
+				ctx.fillRect(x, y, 5, 5)
+			} else {
+				ctx.clearRect(x, y, 30, 30)
+			}
+		}
+
+		canvas.addEventListener('mousedown', function(event) {
+			const rect = canvas.getBoundingClientRect()
+			const x = event.clientX - rect.left
+			const y = event.clientY - rect.top
+
+			websocket.send(toFormat(action, x, y))
+		})
+
+		canvas.addEventListener('mousemove', function(event) {
+			if (event.buttons === 1) {
+				const rect = canvas.getBoundingClientRect()
+				const x = event.clientX - rect.left
+				const y = event.clientY - rect.top
+
+				websocket.send(toFormat(action, x, y))
+			}
+
+			const span = document.querySelector('span')
+			span.style = `left: ${event.clientX}px; top: ${event.clientY}px;`
+		})
+
+		canvas.addEventListener('contextmenu', function(event) {
+			event.preventDefault()
+			action = action === 'draw' ? 'erase' : 'draw'
+
+			if (action === 'erase') {
+				document.querySelector('span').hidden = false
+			} else {
+				document.querySelector('span').hidden = true
+			}
+		});
+	</script>
+	</script>
+</body>
+</html>
