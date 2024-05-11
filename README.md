@@ -1,4 +1,4 @@
-![draw together](https://github.com/prplwtf/draw-together/assets/103201875/edd82c41-2c8a-45dc-8bb6-4e61b89457e1)
+![draw together](https://github.com/0x7d8/draw-together/blob/main/drawbanner.png?raw=true)
 
 <br/>
 
