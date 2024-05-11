@@ -2,14 +2,15 @@ import { Channel, Server } from "rjweb-server"
 import { Runtime } from "@rjweb/runtime-node"
 import { number } from "@rjweb/utils"
 import * as fs from "fs"
+import path from "path"
 
 const seperator = Buffer.from([0x69, 0x62, 0x64, 0x69]),
   options = {
     nosave: process.argv.includes('--nosave')
   }
 
-if (!fs.existsSync('../history.raw') && !options.nosave) fs.writeFileSync('../history.raw', Buffer.concat([Buffer.from([0x01]), seperator]))
-const write = !options.nosave ? fs.createWriteStream('../history.raw', {
+if (!fs.existsSync(path.join(__dirname, '../history.raw')) && !options.nosave) fs.writeFileSync(path.join(__dirname, '../history.raw'), Buffer.concat([Buffer.from([0x01]), seperator]))
+const write = !options.nosave ? fs.createWriteStream(path.join(__dirname, '../history.raw'), {
   flags: 'a'
 }) : null
 
