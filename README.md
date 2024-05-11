@@ -29,3 +29,11 @@ cd draw-together
 # use the --nosave argument to skip saving to disk
 PORT=8000 pnpm prod
 ```
+
+<br/>
+
+**Public Instance**
+
+```sh
+There is a public instance at https://draw-together.rjansen.dev that resets every full hour.
+```
