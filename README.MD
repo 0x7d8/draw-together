@@ -22,7 +22,7 @@ pnpm build
 ```sh
 cd draw-together
 
-pnpm prod
+PORT=8000 pnpm prod
 ```
 
 ### Do not Save to Disk
@@ -30,5 +30,5 @@ pnpm prod
 ```sh
 cd draw-together
 
-pnpm prod --nosave
+PORT=8000 pnpm prod --nosave
 ```
