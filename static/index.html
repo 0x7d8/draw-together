@@ -169,12 +169,21 @@
 		}
 
 		/** @type {HTMLCanvasElement} */
-		var canvas = document.getElementById('canvas')
+		const canvas = document.getElementById('canvas')
 		canvas.width = window.innerWidth
 		canvas.height = window.innerHeight - 50
 
-		var websocket = new WebSocket('wss://8000.webhook.pet')
-		var id = 0
+		const websocket = new WebSocket('wss://8000.webhook.pet')
+
+		websocket.addEventListener('close', () => {
+			alert('Connection Closed')
+			window.location.reload()
+		})
+
+		websocket.addEventListener('error', () => {
+			alert('Connection Error')
+			window.location.reload()
+		})
 
 		websocket.addEventListener('message', async(e) => {
 			const ab = await e.data.arrayBuffer()
