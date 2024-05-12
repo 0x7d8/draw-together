@@ -86,7 +86,7 @@ drawChannel.listen((data) => {
   write?.write(Buffer.concat([data, seperator]))
 })
 
-if (!options.nosave) {
+if (fs.existsSync(path.join(__dirname, '../history.raw'))) {
   const now = performance.now()
   console.log('loading history...')
 
