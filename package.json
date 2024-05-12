@@ -3,8 +3,8 @@
   "license": "MIT",
   "scripts": {
     "build": "tsc",
-    "dev": "tsc && cd lib && node index && cd ..",
-    "prod": "node lib/index.js"
+    "dev": "tsc && cd lib && node index.js && cd ..",
+    "prod": "cd lib && node index.js"
   },
   "dependencies": {
     "@rjweb/runtime-node": "^1.1.0",
