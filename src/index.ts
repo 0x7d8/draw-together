@@ -15,7 +15,10 @@ const write = !options.nosave ? fs.createWriteStream(path.join(__dirname, '../hi
 }) : null
 
 const server = new Server(Runtime, {
-  port: process.env.PORT ? parseInt(process.env.PORT) : 8000
+  port: process.env.PORT ? parseInt(process.env.PORT) : 8000,
+  proxy: {
+    enabled: true
+  }
 }, [], {
   requests: 0
 })
