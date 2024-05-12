@@ -35,5 +35,5 @@ PORT=8000 pnpm prod
 **Public Instance**
 
 ```sh
-There is a public instance at https://draw-together.rjansen.dev that resets every full hour.
+There is a public instance at https://draw-together.rjansen.dev/ that resets every two full hours.
 ```
