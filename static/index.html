@@ -114,7 +114,7 @@
 
 		setInterval(() => {
 			document.getElementById('messages').innerText = `${messages} Messages`
-			document.getElementById('bytes').innerText = `${Math.floor(bytes / 1024).toFixed(2)} KB`
+			document.getElementById('bytes').innerText = `${(bytes / 1024).toFixed(2)} KB`
 		}, 100)
 
 		const colors = Array.from({ length: 256 }, (_, i) => {
