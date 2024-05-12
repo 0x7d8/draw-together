@@ -2,8 +2,8 @@
   "version": "1.0.0",
   "license": "MIT",
   "scripts": {
-    "build": "tsc",
-    "dev": "tsc && cd lib && node index.js && cd ..",
+    "build": "rm -rf lib && tsc",
+    "dev": "pnpm build && cd lib && node index.js && cd ..",
     "prod": "cd lib && node index.js"
   },
   "dependencies": {

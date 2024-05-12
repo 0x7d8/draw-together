@@ -79,18 +79,25 @@ const drawChannel = new Channel<Buffer>()
 
 const history: Buffer[] = []
 drawChannel.listen((data) => {
-  history.push(data)
+  history.push(data, seperator)
   write?.write(Buffer.concat([data, seperator]))
 })
 
-const file = fs.readFileSync('../history.raw')
-let startIndex = 0
-let endIndex = file.indexOf(seperator)
-while (endIndex !== -1) {
-  const data = file.subarray(startIndex, endIndex)
-  if (data.byteLength > 1) history.push(data)
-  startIndex = endIndex + seperator.length
-  endIndex = file.indexOf(seperator, startIndex)
+if (!options.nosave) {
+  const now = performance.now()
+  console.log('loading history...')
+
+  const file = fs.readFileSync(path.join(__dirname, '../history.raw'))
+  let startIndex = 0
+  let endIndex = file.indexOf(seperator)
+  while (endIndex !== -1) {
+    const data = file.subarray(startIndex, endIndex)
+    if (data.byteLength > 1) history.push(data, seperator)
+    startIndex = endIndex + seperator.length
+    endIndex = file.indexOf(seperator, startIndex)
+  }
+
+  console.log(`loaded history in ${(performance.now() - now).toFixed(2)}ms`)
 }
 
 const users: Record<number, string> = {}
@@ -132,22 +139,22 @@ server.path('/', (path) => path
   )
   .http('GET', '/history', (http) => http
     .onRequest((ctr) => {
-      return ctr.print(Buffer.concat(
-        history.flatMap((value) => [value, seperator])
-      ))
+      ctr.headers.set('content-type', 'robert/history-raw')
+
+      return ctr.print(Buffer.concat(history))
     })
   )
 )
 
 let requests = 0
 server.http((ctr) => {
-  console.log(`${ctr.type} ${ctr.url.method} Request made to ${ctr.url.href}`)
+  console.log(`${ctr.type.toUpperCase()} ${ctr.url.method} Request made to ${ctr.url.href} (${ctr.client.ip.usual()})`)
 
   ctr["@"].requests = ++requests
 })
 
 server.start()
   .then((port) => {
-    console.log(`Server started on port ${port}`)
+    console.log(`server started on port ${port}`)
   })
   .catch(console.error)

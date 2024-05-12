@@ -3,6 +3,7 @@
 <head>
 	<title>Draw Application</title>
 	<meta name="darkreader-lock">
+	<link rel="icon" type="image/png" href="https://cdn.rjns.dev/profile/pfp.png">
 	<style>
 		html, body {
 			margin: 0;
@@ -177,12 +178,18 @@
 
 		websocket.addEventListener('close', () => {
 			alert('Connection Closed')
-			window.location.reload()
+
+			setTimeout(() => {
+				window.location.reload()
+			}, 1000)
 		})
 
 		websocket.addEventListener('error', () => {
 			alert('Connection Error')
-			window.location.reload()
+
+			setTimeout(() => {
+				window.location.reload()
+			}, 1000)
 		})
 
 		websocket.addEventListener('message', async(e) => {
