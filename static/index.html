@@ -173,7 +173,7 @@
 		canvas.width = window.innerWidth
 		canvas.height = window.innerHeight - 50
 
-		const websocket = new WebSocket('wss://8000.webhook.pet')
+		const websocket = new WebSocket(`${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.hostname}`)
 
 		websocket.addEventListener('close', () => {
 			alert('Connection Closed')
