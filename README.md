@@ -32,8 +32,8 @@ PORT=8000 pnpm prod
 
 <br/>
 
-**Public Instance**
+**Instances**
 
-```sh
-There is a public instance at https://draw-together.rjansen.dev/ that resets every two full hours.
-```
+| Country    | URL                                |
+|------------|------------------------------------|
+| 🇩🇪 Germany | https://draw-together.rjansen.dev/ |
