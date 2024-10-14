@@ -93,29 +93,18 @@ if (fs.existsSync(path.join(__dirname, '../history.raw')) && options.nosave) {
   const now = performance.now()
   console.log('loading history...')
 
-  const stream = fs.createReadStream(path.join(__dirname, '../history.raw'))
+  const buffer = fs.readFileSync(path.join(__dirname, '../history.raw'))
 
-  let buffer = Buffer.allocUnsafe(0)
-  while (true) {
-    const data = stream.read()
-    if (!data) break
-
-    buffer = Buffer.concat([buffer, data])
-
-    let startIndex = 0
-    let endIndex = buffer.indexOf(seperator)
-    while (endIndex !== -1) {
-      const data = buffer.subarray(startIndex, endIndex)
-      if (data.byteLength > 1) history.push(data, seperator)
-      startIndex = endIndex + seperator.length
-      endIndex = buffer.indexOf(seperator, startIndex)
-    }
-
-    buffer = buffer.subarray(startIndex)
-    if (endIndex === -1) break
+  let startIndex = 0
+  let endIndex = buffer.indexOf(seperator)
+  while (endIndex !== -1) {
+    const data = buffer.subarray(startIndex, endIndex)
+    if (data.byteLength > 1) history.push(data, seperator)
+    startIndex = endIndex + seperator.length
+    endIndex = buffer.indexOf(seperator, startIndex)
   }
 
-  console.log(`loaded history in ${(performance.now() - now).toFixed(2)}ms`)
+  console.log(`loaded history in ${(performance.now() - now).toFixed(2)}ms with ${history.length} entries`)
 }
 
 const users = new Map<number, string>()
