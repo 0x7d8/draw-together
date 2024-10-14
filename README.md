@@ -26,7 +26,7 @@ pnpm build
 ```sh
 cd draw-together
 
-# use the --nosave argument to skip saving to disk
+# use the --nosave argument to skip saving to disk (memory intensive)
 PORT=8000 pnpm prod
 ```
 

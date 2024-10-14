@@ -24,7 +24,7 @@ const server = new Server(Runtime, {
 })
 
 // Data format
-// <type Uint8> <Uint16> <Uint16> <Uint8>
+// <type Uint8> <Uint16> <Uint16> <Uint8> <Uint8>
 
 const colors: string[] = Array.from({ length: 256 }, (_, i) => {
   let r = 0, g = 0, b = 0
@@ -51,7 +51,7 @@ const types = [
   'erase'
 ] as const
 
-function toFormat(type: typeof types[number], x: number, y: number, color: string): Buffer {
+function toFormat(type: typeof types[number], x: number, y: number, height: number, color: string): Buffer {
   const uint8Color = colors.findIndex((c) => c === color)
   if (uint8Color === -1) throw 'Invalid Format'
 
@@ -62,50 +62,65 @@ function toFormat(type: typeof types[number], x: number, y: number, color: strin
     types.findIndex((v) => v === type),
     ...uint8X,
     ...uint8Y,
-    uint8Color
+    uint8Color,
+    height
   ])
 
   return buffer
 }
 
-function fromFormat(buffer: Buffer): [type: typeof types[number], x: number, y: number] {
+function fromFormat(buffer: Buffer): [type: typeof types[number], x: number, y: number, height: number] {
   const type = buffer[0]
   const x = buffer.readUInt16LE(1)
   const y = buffer.readUInt16LE(3)
+  const height = buffer[5] || 5
 
   if (!types[type] || !x || !y) throw 'Invalid Format'
 
-  return [types[type], x, y]
+  return [types[type], x, y, height]
 }
 
 const drawChannel = new Channel<Buffer>()
 
 const history: Buffer[] = []
 drawChannel.listen((data) => {
-  history.push(data, seperator)
+  if (options.nosave) history.push(data, seperator)
+
   write?.write(Buffer.concat([data, seperator]))
 })
 
-if (fs.existsSync(path.join(__dirname, '../history.raw'))) {
+if (fs.existsSync(path.join(__dirname, '../history.raw')) && options.nosave) {
   const now = performance.now()
   console.log('loading history...')
 
-  const file = fs.readFileSync(path.join(__dirname, '../history.raw'))
-  let startIndex = 0
-  let endIndex = file.indexOf(seperator)
-  while (endIndex !== -1) {
-    const data = file.subarray(startIndex, endIndex)
-    if (data.byteLength > 1) history.push(data, seperator)
-    startIndex = endIndex + seperator.length
-    endIndex = file.indexOf(seperator, startIndex)
+  const stream = fs.createReadStream(path.join(__dirname, '../history.raw'))
+
+  let buffer = Buffer.allocUnsafe(0)
+  while (true) {
+    const data = stream.read()
+    if (!data) break
+
+    buffer = Buffer.concat([buffer, data])
+
+    let startIndex = 0
+    let endIndex = buffer.indexOf(seperator)
+    while (endIndex !== -1) {
+      const data = buffer.subarray(startIndex, endIndex)
+      if (data.byteLength > 1) history.push(data, seperator)
+      startIndex = endIndex + seperator.length
+      endIndex = buffer.indexOf(seperator, startIndex)
+    }
+
+    buffer = buffer.subarray(startIndex)
+    if (endIndex === -1) break
   }
 
   console.log(`loaded history in ${(performance.now() - now).toFixed(2)}ms`)
 }
 
-const users: Record<number, string> = {}
+const users = new Map<number, string>()
 
-server.path('/', (path) => path
+server.path('/', (p) => p
   .static('../static', {
     stripHtmlEnding: true
   })
@@ -118,33 +133,37 @@ server.path('/', (path) => path
       for (let i = 0; i < 255; i++) {
         const real = (i + number.generateCrypto(1, 1000)) % 255
 
-        if (!users[real]) id = real
+        if (!users.has(real)) id = real
       }
 
       if (!id) return ctr.status(ctr.$status.CONFLICT).print('No more slots')
 
-      users[id] = 'lol'
+      users.set(id, 'lol')
       ctr["@"].id = id
     })
     .onOpen((ctr) => {
       ctr.printChannel(drawChannel)
     })
     .onMessage(async(ctr) => {
-      try {
-        const [ type, x, y ] = fromFormat(ctr.rawMessageBytes())
+      const bytes = ctr.rawMessageBytes()
+      if (bytes.byteLength !== 6) return
 
-        await drawChannel.send('binary', toFormat(type, x, y, colors[ctr["@"].id]))
+      try {
+        const [ type, x, y, height ] = fromFormat(bytes)
+
+        await drawChannel.send('binary', toFormat(type, x, y, height, colors[ctr["@"].id]))
       } catch { }
     })
     .onClose((ctr) => {
-      delete users[ctr["@"].id]
+      users.delete(ctr["@"].id)
     })
   )
   .http('GET', '/history', (http) => http
     .onRequest((ctr) => {
       ctr.headers.set('content-type', 'robert/history-raw')
 
-      return ctr.print(Buffer.concat(history))
+      if (!options.nosave) return ctr.printFile(path.join(__dirname, '../history.raw'), { compress: true, addTypes: false })
+      else return ctr.print(Buffer.concat(history))
     })
   )
 )

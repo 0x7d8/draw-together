@@ -19,6 +19,7 @@
 			position: absolute;
 			display: flex;
 			flex-direction: row;
+			justify-content: space-between;
 			width: 100%;
 			height: 50px;
 			background: chocolate;
@@ -30,7 +31,8 @@
 		}
 
 		h1 {
-			margin: auto;
+			margin-top: auto;
+			margin-bottom: auto;
 			color: white;
 		}
 
@@ -52,6 +54,14 @@
 			color: black;
 			pointer-events: none;
 		}
+
+		#mini {
+			margin-top: 0;
+			margin-bottom: 0;
+			margin-right: auto;
+			margin-left: auto;
+			color: white;
+		}
 	</style>
 </head>
 <body>
@@ -60,6 +70,10 @@
 	</span>
 	<div id="bar">
 		<h1>draw together!</h1>
+		<div id = "flex-me-away">
+			<p id="mini">Brush Size</p>
+			<input id="height" type="range" min="1" max="250" value="5">
+		</div>
 		<div id="flex-me-away">
 			<p id="messages" class="stat">0 Messages</p>
 			<p id="bytes" class="stat">0.00 KB</p>
@@ -81,11 +95,11 @@
 				while (endIndex !== -1) {
 					const data = arr.subarray(startIndex, endIndex)
 					if (data.byteLength > 1) {
-						const [ type, x, y, color ] = fromFormat(data)
+						const [ type, x, y, color, height ] = fromFormat(data)
 						messages++
 						bytes += data.byteLength
 
-						draw(x, y, color, type)
+						draw(x, y, color, type, height)
 					}
 
 					startIndex = endIndex + seperator.length
@@ -143,30 +157,41 @@
 			'erase'
 		]
 
-		function toFormat(type, x, y) {
+		/**
+		 * @param {string} type
+		 * @param {number} x
+		 * @param {number} y
+		 * @param {number} height
+		 * @returns {Uint8Array}
+		*/ function toFormat(type, x, y, height) {
 			const uint8X = new Uint8Array([x & 0xFF, (x >> 8) & 0xFF])
 			const uint8Y = new Uint8Array([y & 0xFF, (y >> 8) & 0xFF])
 
 			const buffer = new Uint8Array([
 				types.findIndex((v) => v === type),
 				...uint8X,
-				...uint8Y
+				...uint8Y,
+				height
 			])
 
 			return buffer
 		}
 
-		function fromFormat(buffer) {
+		/**
+		 * @param {Uint8Array} buffer
+		 * @returns {[string, number, number, string, number]}
+		*/ function fromFormat(buffer) {
 			const type = buffer[0]
 			const uint8Color = buffer[5]
 			const color = colors[uint8Color]
+			const height = buffer[6] || 5
 
 			const x = buffer[1] | (buffer[2] << 8)
 			const y = buffer[3] | (buffer[4] << 8)
 
-			if (!types[type] || !x || !y || !color) throw 'Invalid Format'
+			if (!types[type] || !x || !y || !color || !height) throw 'Invalid Format'
 
-			return [types[type], x, y, color]
+			return [types[type], x, y, color, height]
 		}
 
 		/** @type {HTMLCanvasElement} */
@@ -174,7 +199,7 @@
 		canvas.width = window.innerWidth
 		canvas.height = window.innerHeight - 50
 
-		const websocket = new WebSocket(`${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}`)
+		const websocket = new WebSocket(`${window.location.protocol.replace('http', 'ws')}//${window.location.host}`)
 
 		websocket.addEventListener('close', () => {
 			alert('Connection Closed')
@@ -198,21 +223,34 @@
 			messages++
 			bytes += ab.byteLength
 
-			const [ type, x, y, color ] = fromFormat(new Uint8Array(ab))
+			const [ type, x, y, color, height ] = fromFormat(new Uint8Array(ab))
 
-			draw(x, y, color, type)
+			draw(x, y, color, type, height)
 		})
 
 		/** @type {'draw' | 'erase'} */
 		let action = 'draw'
 
-		function draw(x, y, _color, type) {
+		/** @type {number} */
+		let height = 5
+
+		document.getElementById('height').addEventListener('input', (e) => {
+			height = parseInt(e.target.value)
+		})
+
+		/**
+		 * @param {number} x
+		 * @param {number} y
+		 * @param {string} _color
+		 * @param {'draw' | 'erase'} type
+		 * @param {number} height
+		*/ function draw(x, y, _color, type, height) {
 			var ctx = canvas.getContext('2d')
 			if (type === 'draw') {
 				ctx.fillStyle = _color
-				ctx.fillRect(x, y, 5, 5)
+				ctx.fillRect(x, y, height, height)
 			} else {
-				ctx.clearRect(x, y, 30, 30)
+				ctx.clearRect(x, y, height * 1.5, height * 1.5)
 			}
 		}
 
@@ -221,7 +259,7 @@
 			const x = event.clientX - rect.left
 			const y = event.clientY - rect.top
 
-			websocket.send(toFormat(action, x, y))
+			websocket.send(toFormat(action, x, y, height))
 		})
 
 		canvas.addEventListener('mousemove', function(event) {
@@ -230,7 +268,7 @@
 				const x = event.clientX - rect.left
 				const y = event.clientY - rect.top
 
-				websocket.send(toFormat(action, x, y))
+				websocket.send(toFormat(action, x, y, height))
 			}
 
 			const span = document.querySelector('span')

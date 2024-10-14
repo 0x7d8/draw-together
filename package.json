@@ -1,5 +1,5 @@
 {
-  "version": "1.0.0",
+  "version": "1.1.0",
   "license": "MIT",
   "scripts": {
     "build": "rimraf lib && tsc",
@@ -7,13 +7,13 @@
     "prod": "cd lib && node index.js"
   },
   "dependencies": {
-    "@rjweb/runtime-node": "^1.1.0",
-    "@rjweb/utils": "^1.12.13",
-    "rjweb-server": "^9.5.1"
+    "@rjweb/runtime-node": "^1.1.1",
+    "@rjweb/utils": "^1.12.23",
+    "rjweb-server": "^9.8.2"
   },
   "devDependencies": {
-    "@types/node": "^18.19.33",
-    "typescript": "^5.4.5",
-    "rimraf": "^5.0.7"
+    "@types/node": "^18.19.55",
+    "rimraf": "^5.0.10",
+    "typescript": "^5.6.3"
   }
 }
