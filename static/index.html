@@ -55,7 +55,7 @@
 			pointer-events: none;
 		}
 
-		#mini {
+		#brush {
 			margin-top: 0;
 			margin-bottom: 0;
 			margin-right: auto;
@@ -71,7 +71,7 @@
 	<div id="bar">
 		<h1>draw together!</h1>
 		<div id = "flex-me-away">
-			<p id="mini">Brush Size</p>
+			<p id="brush">Brush Size (5px)</p>
 			<input id="height" type="range" min="1" max="250" value="5">
 		</div>
 		<div id="flex-me-away">
@@ -236,6 +236,8 @@
 
 		document.getElementById('height').addEventListener('input', (e) => {
 			height = parseInt(e.target.value)
+
+			document.getElementById('brush').innerText = `Brush Size (${height}px)`
 		})
 
 		/**
