@@ -157,7 +157,7 @@
 			const x = buffer[1] | (buffer[2] << 8)
 			const y = buffer[3] | (buffer[4] << 8)
 
-			if (!types[type] || !x || !y || color.length < 7 || !height) throw 'Invalid Format'
+			if (!types[type] || color.length < 7 || !height) throw 'Invalid Format'
 
 			return [types[type], x, y, height, color]
 		}

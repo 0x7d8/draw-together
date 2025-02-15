@@ -133,9 +133,7 @@ impl Data {
 
             file.write_all(&encoded).await.unwrap();
         } else {
-            let self_data = self
-                .data
-                .get_or_insert_with(|| Arc::new(Mutex::new(Vec::new())));
+            let self_data = self.data.as_mut().unwrap();
 
             let mut self_data = self_data.lock().await;
             self_data.extend_from_slice(&encoded);
