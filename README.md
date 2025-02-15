@@ -13,10 +13,14 @@
 git clone https://github.com/0x7d8/draw-together.git
 cd draw-together
 
-# make sure nodejs 18+ is installed
-npm i -g pnpm
-pnpm install
-pnpm build
+# make sure cargo is installed
+cargo install --path .
+draw-together
+
+# or use the pre-built binary
+# download the latest release from the releases page
+# extract the downloaded archive
+# add the binary to your PATH
 ```
 
 <br/>
@@ -24,10 +28,8 @@ pnpm build
 **Running**
 
 ```sh
-cd draw-together
-
 # use the --nosave argument to skip saving to disk (memory intensive)
-PORT=8000 pnpm prod
+PORT=8000 draw-together
 ```
 
 <br/>
