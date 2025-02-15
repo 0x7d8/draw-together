@@ -37,6 +37,10 @@ impl ClientMessage {
         let height = data[5];
         let color = [data[6], data[7], data[8]];
 
+        if height == 0 {
+            return None;
+        }
+
         Some(Self {
             action,
             x,
