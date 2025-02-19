@@ -179,6 +179,7 @@
 					ctx.fillRect(x, y, height * 1.5, height * 1.5)
 					break
 				case 'cube-hollow':
+					ctx.strokeStyle = _color
 					ctx.strokeRect(x, y, height * 1.5, height * 1.5)
 					break
 				case 'circle-normal':
@@ -189,6 +190,7 @@
 				case 'circle-hollow':
 					ctx.beginPath()
 					ctx.arc(x, y, height, 0, 2 * Math.PI)
+					ctx.strokeStyle = _color
 					ctx.stroke()
 					break
 				case 'triangle-normal':
@@ -204,6 +206,7 @@
 					ctx.lineTo(x + height, y + height)
 					ctx.lineTo(x - height, y + height)
 					ctx.closePath()
+					ctx.strokeStyle = _color
 					ctx.stroke()
 					break
 			}
