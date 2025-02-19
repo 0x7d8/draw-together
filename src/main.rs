@@ -121,7 +121,12 @@ async fn handle_ws(
                     break;
                 }
 
-                let parsed = data::ClientMessage::decode(&ws_data.unwrap().unwrap().into_data());
+                let ws_data = ws_data.unwrap();
+                if ws_data.is_err() {
+                    break;
+                }
+
+                let parsed = data::ClientMessage::decode(&ws_data.unwrap().into_data());
 
                 if parsed.is_none() {
                     continue;

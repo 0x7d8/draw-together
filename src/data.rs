@@ -6,8 +6,13 @@ use tokio::{
 };
 
 pub enum Action {
-    Draw,
+    DrawCubeNormal,
     Erase,
+    DrawCubeHollow,
+    DrawCircleNormal,
+    DrawCircleHollow,
+    DrawTriangleNormal,
+    DrawTriangleHollow,
 }
 
 pub struct ClientMessage {
@@ -27,8 +32,13 @@ impl ClientMessage {
         }
 
         let action = match data[0] {
-            0 => Action::Draw,
+            0 => Action::DrawCubeNormal,
             1 => Action::Erase,
+            2 => Action::DrawCubeHollow,
+            3 => Action::DrawCircleNormal,
+            4 => Action::DrawCircleHollow,
+            5 => Action::DrawTriangleNormal,
+            6 => Action::DrawTriangleHollow,
             _ => return None,
         };
 
@@ -54,8 +64,13 @@ impl ClientMessage {
         let mut buf = [0; 9];
 
         buf[0] = match self.action {
-            Action::Draw => 0,
+            Action::DrawCubeNormal => 0,
             Action::Erase => 1,
+            Action::DrawCubeHollow => 2,
+            Action::DrawCircleNormal => 3,
+            Action::DrawCircleHollow => 4,
+            Action::DrawTriangleNormal => 5,
+            Action::DrawTriangleHollow => 6,
         };
 
         buf[1..3].copy_from_slice(&self.x.to_le_bytes());

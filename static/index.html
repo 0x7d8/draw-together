@@ -1,269 +1,231 @@
 <!DOCTYPE html>
 <html>
 <head>
-	<title>Draw Application</title>
+	<title>Draw Together!</title>
 	<meta name="darkreader-lock">
 	<link rel="icon" type="image/png" href="https://cdn.rjns.dev/profile/pfp.png">
-	<style>
-		html, body {
-			margin: 0;
-			padding: 0;
-			overflow: hidden;
-		}
-		canvas {
-			margin-top: 50px;
-			display: block;
-		}
-
-		#bar {
-			position: absolute;
-			display: flex;
-			flex-direction: row;
-			justify-content: space-between;
-			width: 100%;
-			height: 50px;
-			background: chocolate;
-			padding: 3px;
-		}
-
-		* {
-			font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-		}
-
-		h1 {
-			margin-top: auto;
-			margin-bottom: auto;
-			color: white;
-		}
-
-		#flex-me-away {
-			display: flex;
-			flex-direction: column;
-		}
-
-		.stat {
-			margin: 0;
-			margin-right: 10px;
-			text-align: right;
-			color: white;
-		}
-
-		span {
-			z-index: 100;
-			position: absolute;
-			color: black;
-			pointer-events: none;
-		}
-
-		#brush {
-			margin-top: 0;
-			margin-bottom: 0;
-			margin-right: auto;
-			margin-left: auto;
-			color: white;
-		}
-
-		#color {
-			margin-top: 0;
-			margin-bottom: 0;
-			margin-right: auto;
-			margin-left: auto;
-			color: white;
-		}
-	</style>
+	<script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body>
-	<span hidden style="top: 0; left: 0;">
-		<svg xmlns="http://www.w3.org/2000/svg"  width="30"  height="30"  viewBox="0 0 30 30"  fill="currentColor"  class="icon icon-tabler icons-tabler-filled icon-tabler-trash"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M20 6a1 1 0 0 1 .117 1.993l-.117 .007h-.081l-.919 11a3 3 0 0 1 -2.824 2.995l-.176 .005h-8c-1.598 0 -2.904 -1.249 -2.992 -2.75l-.005 -.167l-.923 -11.083h-.08a1 1 0 0 1 -.117 -1.993l.117 -.007h16z" /><path d="M14 2a2 2 0 0 1 2 2a1 1 0 0 1 -1.993 .117l-.007 -.117h-4l-.007 .117a1 1 0 0 1 -1.993 -.117a2 2 0 0 1 1.85 -1.995l.15 -.005h4z" /></svg>
-	</span>
-	<div id="bar">
-		<h1>draw together!</h1>
-		<div id = "flex-me-away">
-			<p id="color">Color (#000000)</p>
-			<input id="color-picker" type="color" value="#000000">
+<body style="background-color: #ffffff" onload="body = document.querySelector('body')">
+  <nav class="flex flex-row justify-between bg-gray-800" style="height: 50px">
+		<div class="flex flex-row items-center">
+			<select id="shape-selector" class="ml-2 bg-gray-500 h-full rounded p-2 hover:bg-gray-400 cursor-pointer">
+				<option value="cube-normal">Cube [Normal]</option>
+				<option value="cube-hollow">Cube [Hollow]</option>
+				<option value="circle-normal">Circle [Normal]</option>
+				<option value="circle-hollow">Circle [Hollow]</option>
+				<option value="triangle-normal">Triangle [Normal]</option>
+				<option value="triangle-hollow">Triangle [Hollow]</option>
+				<option value="erase">Erase</option>
+			</select>
+			<input type="color" id="color-picker" class="ml-2 bg-gray-500 h-full rounded p-2 hover:bg-gray-400 cursor-pointer">
+			<input type="range" id="size-slider" in="4" max="96" class="ml-2 cursor-pointer">
 		</div>
-		<div id = "flex-me-away">
-			<p id="brush">Brush Size (5px)</p>
-			<input id="height" type="range" min="1" max="250" value="5">
+
+		<div class="flex flex-col items-center text-white text-right pr-2">
+			<h1>Draw Together!</h1>
+			<span id="status">Connecting...</span>
 		</div>
-		<div id="flex-me-away">
-			<p id="messages" class="stat">0 Messages</p>
-			<p id="bytes" class="stat">0.00 KiB</p>
-		</div>
-	</div>
+  </nav>
 	<canvas id="canvas"></canvas>
+</body>
 
-	<script>
-		let messages = 0, bytes = 0
+<script>
+	let messages = 0, bytes = 0
 
-		fetch('/history_2.raw')
-			.then((res) => res.arrayBuffer())
-			.then((buf) => new Uint8Array(buf))
-			.then((arr) => {
-				let offset = 0
+	setInterval(() => {
+		document.getElementById('status').innerText = `Connected: ${messages} Messages | ${bytes} Bytes`
+	}, 500)
 
-				while (offset < arr.length) {
-					const [ type, x, y, height, color ] = fromFormat(arr.slice(offset, offset + 9))
-					draw(x, y, color, type, height)
+	fetch('/history_2.raw')
+		.then((res) => res.arrayBuffer())
+		.then((buf) => new Uint8Array(buf))
+		.then((arr) => {
+			let offset = 0
 
-					offset += 9
-					messages++
-					bytes += 9
-				}
-			})
+			while (offset < arr.length) {
+				const [ type, x, y, height, color ] = fromFormat(arr.slice(offset, offset + 9))
+				draw(x, y, color, type, height)
 
-		setInterval(() => {
-			document.getElementById('messages').innerText = `${messages} Messages`
-			document.getElementById('bytes').innerText = `${(bytes / 1024).toFixed(2)} KiB`
-		}, 100)
-
-		const types = [
-			'draw',
-			'erase'
-		]
-
-		/**
-		 * @param {string} type
-		 * @param {number} x
-		 * @param {number} y
-		 * @param {number} height
-		 * @param {string} _color
-		 * @returns {Uint8Array}
-		*/ function toFormat(type, x, y, height, _color) {
-			const uint8X = new Uint8Array([x & 0xFF, (x >> 8) & 0xFF])
-			const uint8Y = new Uint8Array([y & 0xFF, (y >> 8) & 0xFF])
-
-			const buffer = new Uint8Array([
-				types.findIndex((v) => v === type),
-				...uint8X,
-				...uint8Y,
-				height,
-				parseInt(_color.slice(1, 3), 16),
-				parseInt(_color.slice(3, 5), 16),
-				parseInt(_color.slice(5, 7), 16)
-			])
-
-			return buffer
-		}
-
-		/**
-		 * @param {Uint8Array} buffer
-		 * @returns {[string, number, number, number, string]}
-		*/ function fromFormat(buffer) {
-			const type = buffer[0]
-			const height = buffer[5]
-			const color = `#${buffer[6].toString(16).padStart(2, '0')}${buffer[7].toString(16).padStart(2, '0')}${buffer[8].toString(16).padStart(2, '0')}`
-
-			const x = buffer[1] | (buffer[2] << 8)
-			const y = buffer[3] | (buffer[4] << 8)
-
-			if (!types[type] || color.length < 7 || !height) throw 'Invalid Format'
-
-			return [types[type], x, y, height, color]
-		}
-
-		/** @type {HTMLCanvasElement} */
-		const canvas = document.getElementById('canvas')
-		canvas.width = window.innerWidth
-		canvas.height = window.innerHeight - 50
-
-		const websocket = new WebSocket(`${window.location.protocol.replace('http', 'ws')}//${window.location.host}/ws`)
-
-		websocket.addEventListener('close', () => {
-			alert('Connection Closed')
-
-			setTimeout(() => {
-				window.location.reload()
-			}, 1000)
+				offset += 9
+				messages++
+				bytes += 9
+			}
 		})
 
-		websocket.addEventListener('error', () => {
-			alert('Connection Error')
+	const types = [
+		'cube-normal',
+		'erase',
+		'cube-hollow',
+		'circle-normal',
+		'circle-hollow',
+		'triangle-normal',
+		'triangle-hollow'
+	]
 
-			setTimeout(() => {
-				window.location.reload()
-			}, 1000)
-		})
+	/**
+	 * @param {typeof action} type
+	 * @param {number} x
+	 * @param {number} y
+	 * @param {number} height
+	 * @param {string} _color
+	 * @returns {Uint8Array}
+	*/ function toFormat(type, x, y, height, _color) {
+		const uint8X = new Uint8Array([x & 0xFF, (x >> 8) & 0xFF])
+		const uint8Y = new Uint8Array([y & 0xFF, (y >> 8) & 0xFF])
 
-		websocket.addEventListener('message', async(e) => {
-			const ab = await e.data.arrayBuffer()
+		const buffer = new Uint8Array([
+			types.findIndex((v) => v === type),
+			...uint8X,
+			...uint8Y,
+			height,
+			parseInt(_color.slice(1, 3), 16),
+			parseInt(_color.slice(3, 5), 16),
+			parseInt(_color.slice(5, 7), 16)
+		])
 
-			messages++
-			bytes += ab.byteLength
+		return buffer
+	}
 
-			const [ type, x, y, height, color ] = fromFormat(new Uint8Array(ab))
-			draw(x, y, color, type, height)
-		})
+	/**
+	 * @param {Uint8Array} buffer
+	 * @returns {[typeof action, number, number, number, string]}
+	*/ function fromFormat(buffer) {
+		const type = buffer[0]
+		const height = buffer[5]
+		const color = `#${buffer[6].toString(16).padStart(2, '0')}${buffer[7].toString(16).padStart(2, '0')}${buffer[8].toString(16).padStart(2, '0')}`
 
-		/** @type {'draw' | 'erase'} */
-		let action = 'draw'
+		const x = buffer[1] | (buffer[2] << 8)
+		const y = buffer[3] | (buffer[4] << 8)
 
-		/** @type {number} */
-		let height = 5
+		if (!types[type] || color.length < 7 || !height) throw 'Invalid Format'
 
-		/** @type {string} */
-		let color = '#000000'
+		return [types[type], x, y, height, color]
+	}
 
-		document.getElementById('height').addEventListener('input', (e) => {
-			height = parseInt(e.target.value)
+	/** @type {HTMLCanvasElement} */
+	const canvas = document.getElementById('canvas')
+	canvas.width = window.innerWidth
+	canvas.height = window.innerHeight - 50
 
-			document.getElementById('brush').innerText = `Brush Size (${height}px)`
-		})
+	const websocket = new WebSocket(`${window.location.protocol.replace('http', 'ws')}//${window.location.host}/ws`)
 
-		document.getElementById('color-picker').addEventListener('input', (e) => {
-			color = e.target.value
+	websocket.addEventListener('open', () => {
+		document.getElementById('status').innerText = 'Connected | 0 Messages | 0 Bytes'
+	})
 
-			document.getElementById('color').innerText = `Color (${color})`
-		})
+	websocket.addEventListener('close', () => {
+		alert('Connection Closed')
 
-		/**
-		 * @param {number} x
-		 * @param {number} y
-		 * @param {string} _color
-		 * @param {'draw' | 'erase'} type
-		 * @param {number} height
-		*/ function draw(x, y, _color, type, height) {
-			var ctx = canvas.getContext('2d')
-			if (type === 'draw') {
-				ctx.fillStyle = _color
-				ctx.fillRect(x, y, height, height)
-			} else {
-				ctx.clearRect(x, y, height * 1.5, height * 1.5)
+		setTimeout(() => {
+			window.location.reload()
+		}, 1000)
+	})
+
+	websocket.addEventListener('error', () => {
+		alert('Connection Error')
+
+		setTimeout(() => {
+			window.location.reload()
+		}, 1000)
+	})
+
+	websocket.addEventListener('message', async(e) => {
+		const ab = await e.data.arrayBuffer()
+
+		messages++
+		bytes += ab.byteLength
+
+		const [ type, x, y, height, color ] = fromFormat(new Uint8Array(ab))
+		draw(x, y, color, type, height)
+	})
+
+	/** @type {'cube-normal' | 'erase' | 'cube-hollow' | 'circle-normal' | 'circle-hollow' | 'triangle-normal' | 'triangle-hollow'} */
+	let action = 'cube-normal'
+
+	/** @type {number} */
+	let height = 5
+
+	/** @type {string} */
+	let color = '#000000'
+
+	document.getElementById('shape-selector').addEventListener('input', (e) => {
+		action = e.target.value
+	})
+
+	document.getElementById('size-slider').addEventListener('input', (e) => {
+		height = parseInt(e.target.value)
+	})
+
+	document.getElementById('color-picker').addEventListener('input', (e) => {
+		color = e.target.value
+	})
+
+	/**
+	 * @param {number} x
+	 * @param {number} y
+	 * @param {string} _color
+	 * @param {typeof action} type
+	 * @param {number} height
+	*/ function draw(x, y, _color, type, height) {
+		var ctx = canvas.getContext('2d')
+		if (type === 'erase') {
+			ctx.clearRect(x, y, height * 1.5, height * 1.5)
+		} else {
+			ctx.fillStyle = _color
+
+			switch (type) {
+				case 'cube-normal':
+					ctx.fillRect(x, y, height * 1.5, height * 1.5)
+					break
+				case 'cube-hollow':
+					ctx.strokeRect(x, y, height * 1.5, height * 1.5)
+					break
+				case 'circle-normal':
+					ctx.beginPath()
+					ctx.arc(x, y, height, 0, 2 * Math.PI)
+					ctx.fill()
+					break
+				case 'circle-hollow':
+					ctx.beginPath()
+					ctx.arc(x, y, height, 0, 2 * Math.PI)
+					ctx.stroke()
+					break
+				case 'triangle-normal':
+					ctx.beginPath()
+					ctx.moveTo(x, y)
+					ctx.lineTo(x + height, y + height)
+					ctx.lineTo(x - height, y + height)
+					ctx.fill()
+					break
+				case 'triangle-hollow':
+					ctx.beginPath()
+					ctx.moveTo(x, y)
+					ctx.lineTo(x + height, y + height)
+					ctx.lineTo(x - height, y + height)
+					ctx.closePath()
+					ctx.stroke()
+					break
 			}
 		}
+	}
 
-		canvas.addEventListener('mousedown', function(event) {
+	canvas.addEventListener('mousedown', function(event) {
+		const rect = canvas.getBoundingClientRect()
+		const x = event.clientX - rect.left
+		const y = event.clientY - rect.top
+
+		websocket.send(toFormat(action, x, y, height, color))
+	})
+
+	canvas.addEventListener('mousemove', function(event) {
+		if (event.buttons === 1) {
 			const rect = canvas.getBoundingClientRect()
 			const x = event.clientX - rect.left
 			const y = event.clientY - rect.top
 
 			websocket.send(toFormat(action, x, y, height, color))
-		})
-
-		canvas.addEventListener('mousemove', function(event) {
-			if (event.buttons === 1) {
-				const rect = canvas.getBoundingClientRect()
-				const x = event.clientX - rect.left
-				const y = event.clientY - rect.top
-
-				websocket.send(toFormat(action, x, y, height, color))
-			}
-
-			const span = document.querySelector('span')
-			span.style = `left: ${event.clientX}px; top: ${event.clientY}px;`
-		})
-
-		canvas.addEventListener('contextmenu', function(event) {
-			event.preventDefault()
-			action = action === 'draw' ? 'erase' : 'draw'
-
-			if (action === 'erase') {
-				document.querySelector('span').hidden = false
-			} else {
-				document.querySelector('span').hidden = true
-			}
-		});
-	</script>
-	</script>
-</body>
+		}
+	})
+</script>
 </html>
