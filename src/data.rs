@@ -366,16 +366,14 @@ impl Data {
                     let center_x = message.x as f32;
                     let center_y = message.y as f32;
 
-                    let points: [(f32, f32); 6] = (0..6)
-                        .map(|i| {
-                            let angle = (i as f32) * std::f32::consts::PI / 3.0;
-                            let x = center_x + size * angle.cos();
-                            let y = center_y + size * angle.sin();
-                            (x, y)
-                        })
-                        .collect::<Vec<_>>()
-                        .try_into()
-                        .unwrap();
+                    let points = [
+                        (center_x + size, center_y),
+                        (center_x + size / 2.0, center_y - size),
+                        (center_x - size / 2.0, center_y - size),
+                        (center_x - size, center_y),
+                        (center_x - size / 2.0, center_y + size),
+                        (center_x + size / 2.0, center_y + size),
+                    ];
 
                     if is_hollow {
                         for i in 0..6 {
