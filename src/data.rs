@@ -128,27 +128,10 @@ impl ClientMessage {
 
         buf
     }
-
-    pub fn encode_internal(&self) -> u32 {
-        let mut buf = [0; 4];
-
-        buf[0] = Self::encode_u3(match self.action {
-            Action::Erase => 0,
-            Action::DrawCubeNormal => 1,
-            Action::DrawCubeHollow => 2,
-            Action::DrawCircleNormal => 3,
-            Action::DrawCircleHollow => 4,
-            Action::DrawTriangleNormal => 5,
-            Action::DrawTriangleHollow => 6,
-        }) | Self::encode_u5(self.height);
-        buf[1..4].copy_from_slice(&self.color);
-
-        u32::from_le_bytes(buf)
-    }
 }
 
 pub struct Data {
-    pub data: Arc<Mutex<Vec<u32>>>,
+    pub data: Arc<Mutex<Vec<u8>>>,
     pub listeners: Vec<tokio::sync::mpsc::Sender<Vec<u8>>>,
 }
 
@@ -170,20 +153,9 @@ impl Data {
             None => None,
         };
 
-        let mut data: Vec<u32> = vec![0; RESOLUTION];
+        let mut data: Vec<u8> = vec![0xff; RESOLUTION * 3];
         if file.is_some() {
-            let mut file_data: Vec<u8> = Vec::with_capacity(RESOLUTION * 4);
-            file.as_mut()
-                .unwrap()
-                .read_to_end(&mut file_data)
-                .await
-                .unwrap();
-
-            data.iter_mut()
-                .zip(file_data.chunks_exact(4))
-                .for_each(|(data, chunk)| {
-                    *data = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
-                });
+            file.as_mut().unwrap().read_to_end(&mut data).await.unwrap();
         }
 
         let data = Arc::new(Mutex::new(data));
@@ -236,21 +208,211 @@ impl Data {
         let mut self_data = self_data.lock().await;
 
         for message in data {
-            let index = (message.y as usize * RESOLUTION_WIDTH) + message.x as usize;
-            self_data[index] = message.encode_internal();
-        }
+            match message.action {
+                Action::Erase => {
+                    let height = (message.height as f64) * 1.5 * 4.0;
 
-        let mut encoded = Vec::with_capacity(7 * data.len());
-        for message in data {
-            encoded.extend_from_slice(&message.encode());
-        }
+                    let start_x = message.x.saturating_sub(height as u16) as usize;
+                    let end_x =
+                        ((message.x + height as u16).min(RESOLUTION_WIDTH as u16 - 1)) as usize;
+                    let start_y = message.y.saturating_sub(height as u16) as usize;
+                    let end_y =
+                        ((message.y + height as u16).min(RESOLUTION_HEIGHT as u16 - 1)) as usize;
 
-        for listener in &self.listeners {
-            if listener.is_closed() {
-                continue;
+                    for y in start_y..=end_y {
+                        let row_start = y * RESOLUTION_WIDTH * 3;
+                        for x in start_x..=end_x {
+                            let index = row_start + x * 3;
+                            self_data[index] = 0xff;
+                            self_data[index + 1] = 0xff;
+                            self_data[index + 2] = 0xff;
+                        }
+                    }
+                }
+                Action::DrawCubeNormal => {
+                    let height = message.height as usize * 4;
+                    println!("height: {}", height);
+                    let start_x = message.x as usize;
+                    let end_x =
+                        ((message.x + height as u16).min(RESOLUTION_WIDTH as u16 - 1)) as usize;
+                    let start_y = message.y as usize;
+                    let end_y =
+                        ((message.y + height as u16).min(RESOLUTION_HEIGHT as u16 - 1)) as usize;
+
+                    for y in start_y..=end_y {
+                        let row_start = y * RESOLUTION_WIDTH * 3;
+                        for x in start_x..=end_x {
+                            let index = row_start + x * 3;
+                            self_data[index..index + 3].copy_from_slice(&message.color);
+                        }
+                    }
+                }
+                Action::DrawCubeHollow => {
+                    let height = message.height as usize * 4;
+                    let start_x = message.x as usize;
+                    let end_x =
+                        ((message.x + height as u16).min(RESOLUTION_WIDTH as u16 - 1)) as usize;
+                    let start_y = message.y as usize;
+                    let end_y =
+                        ((message.y + height as u16).min(RESOLUTION_HEIGHT as u16 - 1)) as usize;
+
+                    for x in start_x..=end_x {
+                        let top_index = start_y * RESOLUTION_WIDTH * 3 + x * 3;
+                        let bottom_index = end_y * RESOLUTION_WIDTH * 3 + x * 3;
+                        self_data[top_index..top_index + 3].copy_from_slice(&message.color);
+                        self_data[bottom_index..bottom_index + 3].copy_from_slice(&message.color);
+                    }
+
+                    for y in start_y..=end_y {
+                        let left_index = y * RESOLUTION_WIDTH * 3 + start_x * 3;
+                        let right_index = y * RESOLUTION_WIDTH * 3 + end_x * 3;
+                        self_data[left_index..left_index + 3].copy_from_slice(&message.color);
+                        self_data[right_index..right_index + 3].copy_from_slice(&message.color);
+                    }
+                }
+                Action::DrawCircleNormal | Action::DrawCircleHollow => {
+                    let radius = message.height as usize * 4;
+                    let is_hollow = matches!(message.action, Action::DrawCircleHollow);
+
+                    let start_x = message.x.saturating_sub(radius as u16) as usize;
+                    let end_x =
+                        ((message.x + radius as u16).min(RESOLUTION_WIDTH as u16 - 1)) as usize;
+                    let start_y = message.y.saturating_sub(radius as u16) as usize;
+                    let end_y =
+                        ((message.y + radius as u16).min(RESOLUTION_HEIGHT as u16 - 1)) as usize;
+
+                    let center_x = message.x as f32;
+                    let center_y = message.y as f32;
+                    let radius_sq = (radius * radius) as f32;
+                    let inner_radius_sq = ((radius - 1) * (radius - 1)) as f32;
+
+                    for y in start_y..=end_y {
+                        let dy = y as f32 - center_y;
+                        let dy_sq = dy * dy;
+                        let row_start = y * RESOLUTION_WIDTH * 3;
+
+                        for x in start_x..=end_x {
+                            let dx = x as f32 - center_x;
+                            let dist_sq = dx * dx + dy_sq;
+
+                            if (!is_hollow && dist_sq <= radius_sq)
+                                || (is_hollow && dist_sq <= radius_sq && dist_sq >= inner_radius_sq)
+                            {
+                                let index = row_start + x * 3;
+                                self_data[index..index + 3].copy_from_slice(&message.color);
+                            }
+                        }
+                    }
+                }
+                Action::DrawTriangleNormal | Action::DrawTriangleHollow => {
+                    let height = message.height as usize * 4;
+                    let is_hollow = matches!(message.action, Action::DrawTriangleHollow);
+
+                    let x1 = message.x as i32;
+                    let y1 = message.y as i32;
+                    let x2 = (message.x as i32) - (height as i32);
+                    let y2 = message.y as i32 + (height as i32 * 2);
+                    let x3 = message.x as i32 + height as i32;
+                    let y3 = y2;
+
+                    if is_hollow {
+                        draw_line_fast(&mut self_data, x1, y1, x2, y2, &message.color);
+                        draw_line_fast(&mut self_data, x2, y2, x3, y3, &message.color);
+                        draw_line_fast(&mut self_data, x3, y3, x1, y1, &message.color);
+                    } else {
+                        let min_x = x2.min(x3).min(x1).max(0) as usize;
+                        let max_x = x2.max(x3).max(x1).min(RESOLUTION_WIDTH as i32 - 1) as usize;
+                        let min_y = y1.min(y2).min(y3).max(0) as usize;
+                        let max_y = y1.max(y2).max(y3).min(RESOLUTION_HEIGHT as i32 - 1) as usize;
+
+                        for y in min_y..=max_y {
+                            let row_start = y * RESOLUTION_WIDTH * 3;
+                            for x in min_x..=max_x {
+                                if point_in_triangle_fast(
+                                    x as i32, y as i32, x1, y1, x2, y2, x3, y3,
+                                ) {
+                                    let index = row_start + x * 3;
+                                    self_data[index..index + 3].copy_from_slice(&message.color);
+                                }
+                            }
+                        }
+                    }
+                }
             }
+        }
 
-            listener.send(encoded.to_vec()).await.unwrap();
+        if !self.listeners.is_empty() {
+            let mut encoded = Vec::with_capacity(7 * data.len());
+            encoded.extend(data.iter().flat_map(|msg| msg.encode()));
+
+            self.listeners.retain(|listener| !listener.is_closed());
+
+            for listener in &self.listeners {
+                listener.send(encoded.clone()).await.unwrap();
+            }
         }
     }
+}
+
+#[inline(always)]
+fn draw_line_fast(data: &mut Vec<u8>, x1: i32, y1: i32, x2: i32, y2: i32, color: &[u8; 3]) {
+    draw_single_line(data, x1, y1, x2, y2, color);
+    draw_single_line(data, x1 + 1, y1, x2 + 1, y2, color);
+    draw_single_line(data, x1, y1 + 1, x2, y2 + 1, color);
+    draw_single_line(data, x1 + 1, y1 + 1, x2 + 1, y2 + 1, color);
+}
+
+#[inline(always)]
+fn draw_single_line(
+    data: &mut Vec<u8>,
+    mut x1: i32,
+    mut y1: i32,
+    x2: i32,
+    y2: i32,
+    color: &[u8; 3],
+) {
+    let dx = (x2 - x1).abs();
+    let dy = -(y2 - y1).abs();
+    let sx = if x1 < x2 { 1 } else { -1 };
+    let sy = if y1 < y2 { 1 } else { -1 };
+    let mut err = dx + dy;
+
+    loop {
+        if x1 >= 0 && x1 < RESOLUTION_WIDTH as i32 && y1 >= 0 && y1 < RESOLUTION_HEIGHT as i32 {
+            let index = (y1 as usize * RESOLUTION_WIDTH + x1 as usize) * 3;
+            data[index..index + 3].copy_from_slice(color);
+        }
+
+        if x1 == x2 && y1 == y2 {
+            break;
+        }
+
+        let e2 = err * 2;
+        if e2 >= dy {
+            err += dy;
+            x1 += sx;
+        }
+        if e2 <= dx {
+            err += dx;
+            y1 += sy;
+        }
+    }
+}
+
+#[inline(always)]
+fn point_in_triangle_fast(
+    px: i32,
+    py: i32,
+    x1: i32,
+    y1: i32,
+    x2: i32,
+    y2: i32,
+    x3: i32,
+    y3: i32,
+) -> bool {
+    let edge1 = (px - x1) * (y2 - y1) - (py - y1) * (x2 - x1);
+    let edge2 = (px - x2) * (y3 - y2) - (py - y2) * (x3 - x2);
+    let edge3 = (px - x3) * (y1 - y3) - (py - y3) * (x1 - x3);
+
+    (edge1 >= 0 && edge2 >= 0 && edge3 >= 0) || (edge1 <= 0 && edge2 <= 0 && edge3 <= 0)
 }

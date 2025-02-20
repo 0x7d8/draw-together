@@ -51,12 +51,7 @@ async fn main() {
                 headers.insert("Content-Type", "robert/history-2".parse().unwrap());
 
                 let data = data.data.as_ref().lock().await;
-                let body = Body::from(
-                    data.clone()
-                        .iter()
-                        .flat_map(|x| x.to_le_bytes().to_vec())
-                        .collect::<Vec<u8>>(),
-                );
+                let body = Body::from(data.clone());
 
                 (headers, body)
             }),
