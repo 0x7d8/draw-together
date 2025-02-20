@@ -295,9 +295,7 @@ impl Data {
                             let dx = x as f32 - center_x;
                             let dist_sq = dx * dx + dy_sq;
 
-                            if (!is_hollow && dist_sq <= radius_sq)
-                                || (is_hollow && dist_sq <= radius_sq && dist_sq >= inner_radius_sq)
-                            {
+                            if (dist_sq >= inner_radius_sq || !is_hollow) && dist_sq <= radius_sq {
                                 let index = row_start + x * 3;
                                 self_data[index..index + 3].copy_from_slice(&message.color);
                             }
@@ -355,7 +353,7 @@ impl Data {
 }
 
 #[inline(always)]
-fn draw_line_fast(data: &mut Vec<u8>, x1: i32, y1: i32, x2: i32, y2: i32, color: &[u8; 3]) {
+fn draw_line_fast(data: &mut [u8], x1: i32, y1: i32, x2: i32, y2: i32, color: &[u8; 3]) {
     draw_single_line(data, x1, y1, x2, y2, color);
     draw_single_line(data, x1 + 1, y1, x2 + 1, y2, color);
     draw_single_line(data, x1, y1 + 1, x2, y2 + 1, color);
@@ -363,14 +361,7 @@ fn draw_line_fast(data: &mut Vec<u8>, x1: i32, y1: i32, x2: i32, y2: i32, color:
 }
 
 #[inline(always)]
-fn draw_single_line(
-    data: &mut Vec<u8>,
-    mut x1: i32,
-    mut y1: i32,
-    x2: i32,
-    y2: i32,
-    color: &[u8; 3],
-) {
+fn draw_single_line(data: &mut [u8], mut x1: i32, mut y1: i32, x2: i32, y2: i32, color: &[u8; 3]) {
     let dx = (x2 - x1).abs();
     let dy = -(y2 - y1).abs();
     let sx = if x1 < x2 { 1 } else { -1 };
@@ -399,6 +390,7 @@ fn draw_single_line(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 #[inline(always)]
 fn point_in_triangle_fast(
     px: i32,
