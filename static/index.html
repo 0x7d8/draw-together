@@ -218,8 +218,8 @@
 				case 'triangle-normal':
 					ctx.beginPath();
 					ctx.moveTo(x, y);
-					ctx.lineTo(x - height, y + height * 8);
-					ctx.lineTo(x + height, y + height * 8);
+					ctx.lineTo(x - height, y + height * 2);
+					ctx.lineTo(x + height, y + height * 2);
 					ctx.closePath();
 					ctx.fillStyle = _color;
 					ctx.fill();
@@ -227,8 +227,8 @@
 				case 'triangle-hollow':
 					ctx.beginPath();
 					ctx.moveTo(x, y);
-					ctx.lineTo(x - height, y + height * 8);
-					ctx.lineTo(x + height, y + height * 8);
+					ctx.lineTo(x - height, y + height * 2);
+					ctx.lineTo(x + height, y + height * 2);
 					ctx.closePath();
 					ctx.strokeStyle = _color;
 					ctx.lineWidth = 2;
