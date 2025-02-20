@@ -160,6 +160,7 @@ impl Data {
                     .read(true)
                     .write(true)
                     .create(true)
+                    .truncate(true)
                     .open(path)
                     .await
                     .unwrap()
@@ -169,9 +170,7 @@ impl Data {
             None => None,
         };
 
-        let mut data: Vec<u32> = Vec::with_capacity(RESOLUTION);
-        data.resize(RESOLUTION, 0);
-
+        let mut data: Vec<u32> = vec![0; RESOLUTION];
         if file.is_some() {
             let mut file_data: Vec<u8> = Vec::with_capacity(RESOLUTION * 4);
             file.as_mut()
@@ -191,6 +190,7 @@ impl Data {
         let task_data = Arc::clone(&data);
         if file.is_some() && save {
             tokio::spawn(async move {
+                #[allow(clippy::unnecessary_unwrap)]
                 let mut file = file.unwrap();
 
                 loop {
@@ -204,8 +204,7 @@ impl Data {
                     file.write_all(
                         &data
                             .iter()
-                            .map(|data| data.to_le_bytes())
-                            .flatten()
+                            .flat_map(|data| data.to_le_bytes())
                             .collect::<Vec<u8>>(),
                     )
                     .await
