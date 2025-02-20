@@ -13,8 +13,7 @@ use axum::{
 };
 use futures_util::{stream::StreamExt, SinkExt};
 use std::{net::SocketAddr, path::Path, sync::Arc};
-use tokio::{fs::File, sync::Mutex};
-use tokio_util::io::ReaderStream;
+use tokio::sync::Mutex;
 
 const INDEX_HTML: &str = include_str!("../static/index.html");
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -51,17 +50,14 @@ async fn main() {
 
                 headers.insert("Content-Type", "robert/history-2".parse().unwrap());
 
-                if data.file.is_some() {
-                    let stream = ReaderStream::new(File::open("history_2.raw").await.unwrap());
-                    let body = Body::from_stream(stream);
+                let data = data.data.as_ref().lock().await;
+                let body = Body::from(
+                    data.clone().iter()
+                        .flat_map(|x| x.to_le_bytes().to_vec())
+                        .collect::<Vec<u8>>(),
+                );
 
-                    (headers, body)
-                } else {
-                    let data = data.data.as_ref().unwrap().lock().await.clone();
-                    let body = Body::from(data);
-
-                    (headers, body)
-                }
+                (headers, body)
             }),
         )
         .route("/ws", any(handle_ws))
@@ -126,20 +122,27 @@ async fn handle_ws(
                     break;
                 }
 
-                let parsed = data::ClientMessage::decode(&ws_data.unwrap().into_data());
+                let ws_data = ws_data.unwrap().into_data();
 
-                if parsed.is_none() {
-                    continue;
+                let mut parsed = Vec::with_capacity(ws_data.len() / 7);
+                for chunk in ws_data.chunks(7) {
+                    let data = data::ClientMessage::decode(chunk);
+
+                    if data.is_none() {
+                        continue;
+                    }
+
+                    parsed.push(data.unwrap());
                 }
 
-                writer_data.lock().await.write(&parsed.unwrap()).await;
+                writer_data.lock().await.write(&parsed).await;
             }
         });
 
         let (send, mut recieve): (
             tokio::sync::mpsc::Sender<Vec<u8>>,
             tokio::sync::mpsc::Receiver<Vec<u8>>,
-        ) = tokio::sync::mpsc::channel(9);
+        ) = tokio::sync::mpsc::channel(7);
         data.lock().await.add_listener(send);
 
         let reader_sender = Arc::clone(&sender);

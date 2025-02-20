@@ -19,7 +19,7 @@
 				<option value="erase">Erase</option>
 			</select>
 			<input type="color" id="color-picker" class="ml-2 bg-gray-500 h-full rounded p-2 hover:bg-gray-400 cursor-pointer">
-			<input type="range" id="size-slider" in="4" max="96" class="ml-2 cursor-pointer">
+			<input type="range" id="size-slider" value="1" min="1" max="31" class="ml-2 cursor-pointer">
 		</div>
 
 		<div class="flex flex-col items-center text-white text-right pr-2">
@@ -27,7 +27,17 @@
 			<span id="status">Connecting...</span>
 		</div>
   </nav>
-	<canvas id="canvas"></canvas>
+	<style>
+		#canvas {
+			cursor: crosshair;
+			width: 100%;
+    	height: calc(100vh - 50px);
+		}
+	</style>
+	<canvas hidden id="canvas"></canvas>
+	<div id="loading" class="absolute inset-0 flex flex-col items-center justify-center">
+		<h1>Loading Data...</h1>
+	</div>
 </body>
 
 <script>
@@ -44,18 +54,22 @@
 			let offset = 0
 
 			while (offset < arr.length) {
-				const [ type, x, y, height, color ] = fromFormat(arr.slice(offset, offset + 9))
+				const [ type, height, color ] = fromFormatInternal(arr.slice(offset, offset + 4))
+				const x = (offset / 4) % 1920
+				const y = Math.floor((offset / 4) / 1920)
+
 				draw(x, y, color, type, height)
 
-				offset += 9
-				messages++
-				bytes += 9
+				offset += 4
 			}
+
+			document.getElementById('loading').remove()
+			document.getElementById('canvas').hidden = false
 		})
 
 	const types = [
-		'cube-normal',
 		'erase',
+		'cube-normal',
 		'cube-hollow',
 		'circle-normal',
 		'circle-hollow',
@@ -63,22 +77,12 @@
 		'triangle-hollow'
 	]
 
-	/**
-	 * @param {typeof action} type
-	 * @param {number} x
-	 * @param {number} y
-	 * @param {number} height
-	 * @param {string} _color
-	 * @returns {Uint8Array}
-	*/ function toFormat(type, x, y, height, _color) {
-		const uint8X = new Uint8Array([x & 0xFF, (x >> 8) & 0xFF])
-		const uint8Y = new Uint8Array([y & 0xFF, (y >> 8) & 0xFF])
-
+	function toFormat(type, x, y, height, _color) {
 		const buffer = new Uint8Array([
-			types.findIndex((v) => v === type),
-			...uint8X,
-			...uint8Y,
-			height,
+			types.indexOf(type) | (height << 3),
+			(x & 0xFF),
+			((x >> 8) & 0xF) | ((y & 0xF) << 4),
+			(y >> 4) & 0xFF,
 			parseInt(_color.slice(1, 3), 16),
 			parseInt(_color.slice(3, 5), 16),
 			parseInt(_color.slice(5, 7), 16)
@@ -87,26 +91,36 @@
 		return buffer
 	}
 
-	/**
-	 * @param {Uint8Array} buffer
-	 * @returns {[typeof action, number, number, number, string]}
-	*/ function fromFormat(buffer) {
-		const type = buffer[0]
-		const height = buffer[5]
-		const color = `#${buffer[6].toString(16).padStart(2, '0')}${buffer[7].toString(16).padStart(2, '0')}${buffer[8].toString(16).padStart(2, '0')}`
+	function fromFormat(buffer) {
+		const type = buffer[0] & 0b111
+		const height = buffer[0] >> 3
+		const color = `#${buffer[4].toString(16).padStart(2, '0')}${buffer[5].toString(16).padStart(2, '0')}${buffer[6].toString(16).padStart(2, '0')}`
 
-		const x = buffer[1] | (buffer[2] << 8)
-		const y = buffer[3] | (buffer[4] << 8)
+		const x = buffer[1] | ((buffer[2] & 0xF) << 8)
+		const y = (buffer[2] >> 4) | (buffer[3] << 4)
 
 		if (!types[type] || color.length < 7 || !height) throw 'Invalid Format'
 
 		return [types[type], x, y, height, color]
 	}
 
-	/** @type {HTMLCanvasElement} */
+	function fromFormatInternal(buffer) {
+		const type = buffer[0] & 0b111
+		const height = buffer[0] >> 3
+		const color = `#${buffer[1].toString(16).padStart(2, '0')}${buffer[2].toString(16).padStart(2, '0')}${buffer[3].toString(16).padStart(2, '0')}`
+
+		return [types[type], height, color]
+	}
+
 	const canvas = document.getElementById('canvas')
-	canvas.width = window.innerWidth
-	canvas.height = window.innerHeight - 50
+
+	if (window.innerWidth > window.innerHeight) {
+		canvas.width = 1920
+		canvas.height = 1000
+	} else {
+		canvas.width = 1000
+		canvas.height = 1920
+	}
 
 	const websocket = new WebSocket(`${window.location.protocol.replace('http', 'ws')}//${window.location.host}/ws`)
 
@@ -132,21 +146,18 @@
 
 	websocket.addEventListener('message', async(e) => {
 		const ab = await e.data.arrayBuffer()
-
-		messages++
 		bytes += ab.byteLength
 
-		const [ type, x, y, height, color ] = fromFormat(new Uint8Array(ab))
-		draw(x, y, color, type, height)
+		for (let i = 0; i < ab.byteLength / 7; i++) {
+			const [ type, x, y, height, color ] = fromFormat(new Uint8Array(ab.slice(i * 7, (i + 1) * 7)))
+			draw(x, y, color, type, height)
+
+			messages++
+		}
 	})
 
-	/** @type {'cube-normal' | 'erase' | 'cube-hollow' | 'circle-normal' | 'circle-hollow' | 'triangle-normal' | 'triangle-hollow'} */
 	let action = 'cube-normal'
-
-	/** @type {number} */
-	let height = 5
-
-	/** @type {string} */
+	let height = 1
 	let color = '#000000'
 
 	document.getElementById('shape-selector').addEventListener('input', (e) => {
@@ -161,50 +172,45 @@
 		color = e.target.value
 	})
 
-	/**
-	 * @param {number} x
-	 * @param {number} y
-	 * @param {string} _color
-	 * @param {typeof action} type
-	 * @param {number} height
-	*/ function draw(x, y, _color, type, height) {
-		var ctx = canvas.getContext('2d')
+	function draw(x, y, _color, type, height) {
+		const ctx = canvas.getContext('2d')
+
 		if (type === 'erase') {
-			ctx.clearRect(x, y, height * 1.5, height * 1.5)
+			ctx.clearRect(x, y, height * 4 * 1.5, height * 4 * 1.5)
 		} else {
 			ctx.fillStyle = _color
 
 			switch (type) {
 				case 'cube-normal':
-					ctx.fillRect(x, y, height * 1.5, height * 1.5)
+					ctx.fillRect(x, y, height * 4 * 1.5, height * 4 * 1.5)
 					break
 				case 'cube-hollow':
 					ctx.strokeStyle = _color
-					ctx.strokeRect(x, y, height * 1.5, height * 1.5)
+					ctx.strokeRect(x, y, height * 4 * 1.5, height * 4 * 1.5)
 					break
 				case 'circle-normal':
 					ctx.beginPath()
-					ctx.arc(x, y, height, 0, 2 * Math.PI)
+					ctx.arc(x, y, height * 4, 0, 2 * Math.PI)
 					ctx.fill()
 					break
 				case 'circle-hollow':
 					ctx.beginPath()
-					ctx.arc(x, y, height, 0, 2 * Math.PI)
+					ctx.arc(x, y, height * 4, 0, 2 * Math.PI)
 					ctx.strokeStyle = _color
 					ctx.stroke()
 					break
 				case 'triangle-normal':
 					ctx.beginPath()
 					ctx.moveTo(x, y)
-					ctx.lineTo(x + height, y + height)
-					ctx.lineTo(x - height, y + height)
+					ctx.lineTo(x + height * 4, y + height * 4)
+					ctx.lineTo(x - height * 4, y + height * 4)
 					ctx.fill()
 					break
 				case 'triangle-hollow':
 					ctx.beginPath()
 					ctx.moveTo(x, y)
-					ctx.lineTo(x + height, y + height)
-					ctx.lineTo(x - height, y + height)
+					ctx.lineTo(x + height * 4, y + height * 4)
+					ctx.lineTo(x - height * 4, y + height * 4)
 					ctx.closePath()
 					ctx.strokeStyle = _color
 					ctx.stroke()
@@ -213,21 +219,39 @@
 		}
 	}
 
-	canvas.addEventListener('mousedown', function(event) {
-		const rect = canvas.getBoundingClientRect()
-		const x = event.clientX - rect.left
-		const y = event.clientY - rect.top
+	const messageCache = []
 
-		websocket.send(toFormat(action, x, y, height, color))
+	setInterval(() => {
+		if (messageCache.length) {
+			const messages = Array.from(messageCache)
+			messageCache.length = 0
+
+			websocket.send(new Blob(messages))
+		}
+	}, 50)
+
+	function translateResizedMovement(clientX, clientY) {
+		const rect = canvas.getBoundingClientRect()
+		const scaleX = canvas.width / rect.width
+		const scaleY = canvas.height / rect.height
+		
+		const x = (clientX - rect.left) * scaleX
+		const y = (clientY - rect.top) * scaleY
+
+		return [x, y]
+	}
+
+	canvas.addEventListener('mousedown', function(event) {
+		const [x, y] = translateResizedMovement(event.clientX, event.clientY)
+		messageCache.push(toFormat(action, x, y, height, color))
+		draw(x, y, color, action, height)
 	})
 
 	canvas.addEventListener('mousemove', function(event) {
 		if (event.buttons === 1) {
-			const rect = canvas.getBoundingClientRect()
-			const x = event.clientX - rect.left
-			const y = event.clientY - rect.top
-
-			websocket.send(toFormat(action, x, y, height, color))
+			const [x, y] = translateResizedMovement(event.clientX, event.clientY)
+			messageCache.push(toFormat(action, x, y, height, color))
+			draw(x, y, color, action, height)
 		}
 	})
 </script>

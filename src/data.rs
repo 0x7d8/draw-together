@@ -5,9 +5,10 @@ use tokio::{
     sync::Mutex,
 };
 
+#[derive(Debug)]
 pub enum Action {
-    DrawCubeNormal,
     Erase,
+    DrawCubeNormal,
     DrawCubeHollow,
     DrawCircleNormal,
     DrawCircleHollow,
@@ -15,6 +16,16 @@ pub enum Action {
     DrawTriangleHollow,
 }
 
+const RESOLUTION: usize = RESOLUTION_WIDTH * RESOLUTION_HEIGHT;
+const RESOLUTION_HEIGHT: usize = 1000;
+const RESOLUTION_WIDTH: usize = 1920;
+
+// binary format:
+// 0-0: action (3b) + height (5b)
+// 1-3: x (12b) + y (12b)
+// 4-6: color
+
+#[derive(Debug)]
 pub struct ClientMessage {
     pub action: Action,
 
@@ -26,14 +37,50 @@ pub struct ClientMessage {
 }
 
 impl ClientMessage {
+    fn decode_u12(data: &[u8]) -> [u16; 2] {
+        let mut buf: [u16; 2] = [0; 2];
+
+        buf[0] = (data[0] as u16) | ((data[1] as u16 & 0xf) << 8);
+        buf[1] = ((data[1] as u16) >> 4) | ((data[2] as u16) << 4);
+
+        buf
+    }
+
+    fn encode_u12(data: [u16; 2]) -> [u8; 3] {
+        let mut buf = [0; 3];
+
+        buf[0] = (data[0] & 0xff) as u8;
+        buf[1] = ((data[0] >> 8) | (data[1] << 4)) as u8;
+        buf[2] = (data[1] >> 4) as u8;
+
+        buf
+    }
+
+    fn decode_u3(data: u8) -> u8 {
+        data & 0b111
+    }
+
+    fn encode_u3(data: u8) -> u8 {
+        data & 0b111
+    }
+
+    fn decode_u5(data: u8) -> u8 {
+        data >> 3
+    }
+
+    fn encode_u5(data: u8) -> u8 {
+        data << 3
+    }
+
     pub fn decode(data: &[u8]) -> Option<Self> {
-        if data.len() != 9 {
+        if data.len() != 7 {
             return None;
         }
 
-        let action = match data[0] {
-            0 => Action::DrawCubeNormal,
-            1 => Action::Erase,
+        let action_height = data[0];
+        let action = match Self::decode_u3(action_height) {
+            0 => Action::Erase,
+            1 => Action::DrawCubeNormal,
             2 => Action::DrawCubeHollow,
             3 => Action::DrawCircleNormal,
             4 => Action::DrawCircleHollow,
@@ -42,12 +89,12 @@ impl ClientMessage {
             _ => return None,
         };
 
-        let x = u16::from_le_bytes([data[1], data[2]]);
-        let y = u16::from_le_bytes([data[3], data[4]]);
-        let height = data[5];
-        let color = [data[6], data[7], data[8]];
+        let height = Self::decode_u5(action_height);
 
-        if height == 0 {
+        let [x, y] = Self::decode_u12(&data[1..4]);
+        let color = [data[4], data[5], data[6]];
+
+        if height == 0 || x >= RESOLUTION_WIDTH as u16 || y >= RESOLUTION_HEIGHT as u16 {
             return None;
         }
 
@@ -60,43 +107,58 @@ impl ClientMessage {
         })
     }
 
-    pub fn encode(&self) -> [u8; 9] {
-        let mut buf = [0; 9];
+    pub fn encode(&self) -> [u8; 7] {
+        let mut buf = [0; 7];
 
-        buf[0] = match self.action {
-            Action::DrawCubeNormal => 0,
-            Action::Erase => 1,
+        buf[0] = Self::encode_u3(match self.action {
+            Action::Erase => 0,
+            Action::DrawCubeNormal => 1,
             Action::DrawCubeHollow => 2,
             Action::DrawCircleNormal => 3,
             Action::DrawCircleHollow => 4,
             Action::DrawTriangleNormal => 5,
             Action::DrawTriangleHollow => 6,
-        };
+        }) | Self::encode_u5(self.height);
+        buf[1..4].copy_from_slice(&Self::encode_u12([self.x, self.y]));
+        buf[4..7].copy_from_slice(&self.color);
 
-        buf[1..3].copy_from_slice(&self.x.to_le_bytes());
-        buf[3..5].copy_from_slice(&self.y.to_le_bytes());
-        buf[5] = self.height;
-        buf[6..9].copy_from_slice(&self.color);
+        if std::env::var("DEBUG").is_ok() {
+            println!("encoded: {:?}", &self);
+        }
 
         buf
+    }
+
+    pub fn encode_internal(&self) -> u32 {
+        let mut buf = [0; 4];
+
+        buf[0] = Self::encode_u3(match self.action {
+            Action::Erase => 0,
+            Action::DrawCubeNormal => 1,
+            Action::DrawCubeHollow => 2,
+            Action::DrawCircleNormal => 3,
+            Action::DrawCircleHollow => 4,
+            Action::DrawTriangleNormal => 5,
+            Action::DrawTriangleHollow => 6,
+        }) | Self::encode_u5(self.height);
+        buf[1..4].copy_from_slice(&self.color);
+
+        u32::from_le_bytes(buf)
     }
 }
 
 pub struct Data {
-    pub file: Option<File>,
-    pub data: Option<Arc<Mutex<Vec<u8>>>>,
-
+    pub data: Arc<Mutex<Vec<u32>>>,
     pub listeners: Vec<tokio::sync::mpsc::Sender<Vec<u8>>>,
-    save: bool,
 }
 
 impl Data {
     pub async fn new(path: Option<&str>, save: bool) -> Self {
-        let file = match path {
+        let mut file = match path {
             Some(path) => Some(if save {
                 OpenOptions::new()
                     .read(true)
-                    .append(true)
+                    .write(true)
                     .create(true)
                     .open(path)
                     .await
@@ -104,33 +166,61 @@ impl Data {
             } else {
                 File::open(path).await.unwrap()
             }),
-            None => {
-                return Self {
-                    file: None,
-                    data: Some(Arc::new(Mutex::new(Vec::new()))),
-                    listeners: Vec::new(),
-                    save,
-                }
-            }
+            None => None,
         };
 
-        if !save {
-            let mut data = Vec::new();
-            file.unwrap().read_to_end(&mut data).await.unwrap();
+        let mut data: Vec<u32>;
+        if file.is_some() {
+            let mut file_data: Vec<u8> = Vec::with_capacity(RESOLUTION * 4);
+            file.as_mut()
+                .unwrap()
+                .read_to_end(&mut file_data)
+                .await
+                .unwrap();
 
-            return Self {
-                file: None,
-                data: Some(Arc::new(Mutex::new(data))),
-                listeners: Vec::new(),
-                save,
-            };
+            data = file_data
+                .chunks_exact(4)
+                .map(|chunk| {
+                    let mut buf = [0; 4];
+                    buf.copy_from_slice(chunk);
+
+                    u32::from_le_bytes(buf)
+                })
+                .collect::<Vec<u32>>();
+            data.resize(RESOLUTION, 0);
+        } else {
+            data = Vec::with_capacity(RESOLUTION);
+            data.resize(RESOLUTION, 0);
+
+            println!("data: {:?}", &data.len());
+        }
+
+        let data = Arc::new(Mutex::new(data));
+        let task_data = Arc::clone(&data);
+        if file.is_some() && save {
+            tokio::spawn(async move {
+                let mut file = file.unwrap();
+
+                loop {
+                    tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+
+                    println!("saving data...");
+
+                    let data = task_data.lock().await;
+                    for chunk in data.iter() {
+                        file.write_all(&chunk.to_le_bytes()).await.unwrap();
+                    }
+
+                    println!("saving data... done");
+
+                    file.sync_all().await.unwrap();
+                }
+            });
         }
 
         Self {
-            file,
-            data: None,
+            data,
             listeners: Vec::new(),
-            save,
         }
     }
 
@@ -142,20 +232,18 @@ impl Data {
         self.listeners.retain(|listener| !listener.is_closed());
     }
 
-    pub async fn write(&mut self, data: &ClientMessage) {
-        let encoded = data.encode();
+    pub async fn write(&mut self, data: &[ClientMessage]) {
+        let self_data = Arc::clone(&self.data);
+        let mut self_data = self_data.lock().await;
 
-        if let Some(file) = &mut self.file {
-            if !self.save {
-                return;
-            }
+        for message in data {
+            let index = (message.y as usize * RESOLUTION_WIDTH) + message.x as usize;
+            self_data[index] = message.encode_internal();
+        }
 
-            file.write_all(&encoded).await.unwrap();
-        } else {
-            let self_data = self.data.as_mut().unwrap();
-
-            let mut self_data = self_data.lock().await;
-            self_data.extend_from_slice(&encoded);
+        let mut encoded = Vec::with_capacity(7 * data.len());
+        for message in data {
+            encoded.extend_from_slice(&message.encode());
         }
 
         for listener in &self.listeners {
