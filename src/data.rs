@@ -14,6 +14,8 @@ pub enum Action {
     DrawCircleHollow,
     DrawTriangleNormal,
     DrawTriangleHollow,
+    DrawHexagonNormal,
+    DrawHexagonHollow,
 }
 
 const RESOLUTION: usize = RESOLUTION_WIDTH * RESOLUTION_HEIGHT;
@@ -21,9 +23,20 @@ const RESOLUTION_HEIGHT: usize = 1000;
 const RESOLUTION_WIDTH: usize = 1920;
 
 // binary format:
-// 0-0: action (3b) + height (5b)
-// 1-3: x (12b) + y (12b)
-// 4-6: color
+// (4b) action  | byte 1
+// (4b) height  | byte 1
+//
+// (3b) height  | byte 2
+// (5b) x       | byte 2
+//
+// (6b) x       | byte 3
+// (2b) y       | byte 3
+//
+// (8b) y       | byte 4
+//
+// (8b) color[0]| byte 5
+// (8b) color[1]| byte 6
+// (8b) color[2]| byte 7
 
 #[derive(Debug)]
 pub struct ClientMessage {
@@ -37,48 +50,12 @@ pub struct ClientMessage {
 }
 
 impl ClientMessage {
-    fn decode_u12(data: &[u8]) -> [u16; 2] {
-        let mut buf: [u16; 2] = [0; 2];
-
-        buf[0] = (data[0] as u16) | ((data[1] as u16 & 0xf) << 8);
-        buf[1] = ((data[1] as u16) >> 4) | ((data[2] as u16) << 4);
-
-        buf
-    }
-
-    fn encode_u12(data: [u16; 2]) -> [u8; 3] {
-        let mut buf = [0; 3];
-
-        buf[0] = (data[0] & 0xff) as u8;
-        buf[1] = ((data[0] >> 8) | (data[1] << 4)) as u8;
-        buf[2] = (data[1] >> 4) as u8;
-
-        buf
-    }
-
-    fn decode_u3(data: u8) -> u8 {
-        data & 0b111
-    }
-
-    fn encode_u3(data: u8) -> u8 {
-        data & 0b111
-    }
-
-    fn decode_u5(data: u8) -> u8 {
-        data >> 3
-    }
-
-    fn encode_u5(data: u8) -> u8 {
-        data << 3
-    }
-
     pub fn decode(data: &[u8]) -> Option<Self> {
         if data.len() != 7 {
             return None;
         }
 
-        let action_height = data[0];
-        let action = match Self::decode_u3(action_height) {
+        let action = match (data[0] >> 4) & 0xF {
             0 => Action::Erase,
             1 => Action::DrawCubeNormal,
             2 => Action::DrawCubeHollow,
@@ -86,12 +63,19 @@ impl ClientMessage {
             4 => Action::DrawCircleHollow,
             5 => Action::DrawTriangleNormal,
             6 => Action::DrawTriangleHollow,
+            7 => Action::DrawHexagonNormal,
+            8 => Action::DrawHexagonHollow,
             _ => return None,
         };
 
-        let height = Self::decode_u5(action_height);
-
-        let [x, y] = Self::decode_u12(&data[1..4]);
+        let height_high = data[0] & 0xF;
+        let height_low = (data[1] >> 5) & 0x7;
+        let height = (height_high << 3) | height_low;
+        let x_high = data[1] & 0x1F;
+        let x_low = (data[2] >> 2) & 0x3F;
+        let x = ((x_high as u16) << 6) | (x_low as u16);
+        let y_high = data[2] & 0x3;
+        let y = ((y_high as u16) << 8) | (data[3] as u16);
         let color = [data[4], data[5], data[6]];
 
         if height == 0 || x >= RESOLUTION_WIDTH as u16 || y >= RESOLUTION_HEIGHT as u16 {
@@ -110,7 +94,7 @@ impl ClientMessage {
     pub fn encode(&self) -> [u8; 7] {
         let mut buf = [0; 7];
 
-        buf[0] = Self::encode_u3(match self.action {
+        let action_value = match self.action {
             Action::Erase => 0,
             Action::DrawCubeNormal => 1,
             Action::DrawCubeHollow => 2,
@@ -118,9 +102,15 @@ impl ClientMessage {
             Action::DrawCircleHollow => 4,
             Action::DrawTriangleNormal => 5,
             Action::DrawTriangleHollow => 6,
-        }) | Self::encode_u5(self.height);
-        buf[1..4].copy_from_slice(&Self::encode_u12([self.x, self.y]));
-        buf[4..7].copy_from_slice(&self.color);
+            Action::DrawHexagonNormal => 7,
+            Action::DrawHexagonHollow => 8,
+        };
+
+        buf[0] = (action_value << 4) | ((self.height >> 3) & 0xF);
+        buf[1] = ((self.height & 0x7) << 5) | ((self.x >> 6) as u8 & 0x1F);
+        buf[2] = (((self.x & 0x3F) << 2) | ((self.y >> 8) & 0x3)) as u8;
+        buf[3] = self.y as u8;
+        buf[4..].copy_from_slice(&self.color);
 
         if std::env::var("DEBUG").is_ok() {
             println!("encoded: {:?}", &self);
@@ -206,7 +196,7 @@ impl Data {
         for message in data {
             match message.action {
                 Action::Erase => {
-                    let height = (message.height as f64) * 1.5 * 4.0;
+                    let height = (message.height as f64) * 1.5;
 
                     let start_x = message.x.saturating_sub(height as u16) as usize;
                     let end_x =
@@ -226,7 +216,7 @@ impl Data {
                     }
                 }
                 Action::DrawCubeNormal => {
-                    let height = message.height as usize * 4;
+                    let height = message.height as usize;
 
                     let start_x = message.x as usize;
                     let end_x =
@@ -244,7 +234,7 @@ impl Data {
                     }
                 }
                 Action::DrawCubeHollow => {
-                    let height = message.height as usize * 4;
+                    let height = message.height as usize;
 
                     let start_x = message.x as usize;
                     let end_x =
@@ -285,7 +275,7 @@ impl Data {
                     }
                 }
                 Action::DrawCircleNormal | Action::DrawCircleHollow => {
-                    let radius = message.height as usize * 4;
+                    let radius = message.height as usize;
                     let is_hollow = matches!(message.action, Action::DrawCircleHollow);
 
                     let start_x = message.x.saturating_sub(radius as u16) as usize;
@@ -337,7 +327,7 @@ impl Data {
                     }
                 }
                 Action::DrawTriangleNormal | Action::DrawTriangleHollow => {
-                    let height = message.height as usize * 4;
+                    let height = message.height as usize;
                     let is_hollow = matches!(message.action, Action::DrawTriangleHollow);
 
                     let x1 = message.x as i32;
@@ -365,6 +355,78 @@ impl Data {
                                 ) {
                                     let index = row_start + x * 3;
                                     self_data[index..index + 3].copy_from_slice(&message.color);
+                                }
+                            }
+                        }
+                    }
+                }
+                Action::DrawHexagonNormal | Action::DrawHexagonHollow => {
+                    let is_hollow = matches!(message.action, Action::DrawHexagonHollow);
+                    let size = message.height as f32;
+                    let center_x = message.x as f32;
+                    let center_y = message.y as f32;
+
+                    let points: [(f32, f32); 6] = (0..6)
+                        .map(|i| {
+                            let angle = (i as f32) * std::f32::consts::PI / 3.0;
+                            let x = center_x + size * angle.cos();
+                            let y = center_y + size * angle.sin();
+                            (x, y)
+                        })
+                        .collect::<Vec<_>>()
+                        .try_into()
+                        .unwrap();
+
+                    if is_hollow {
+                        for i in 0..6 {
+                            let start = points[i];
+                            let end = points[(i + 1) % 6];
+                            draw_line_fast(
+                                &mut self_data,
+                                start.0 as i32,
+                                start.1 as i32,
+                                end.0 as i32,
+                                end.1 as i32,
+                                &message.color,
+                            );
+                        }
+                    } else {
+                        let min_y = points.iter().map(|(_, y)| *y as i32).min().unwrap();
+                        let max_y = points.iter().map(|(_, y)| *y as i32).max().unwrap();
+
+                        for y in min_y..=max_y {
+                            let mut intersections = Vec::new();
+
+                            for i in 0..6 {
+                                let start = points[i];
+                                let end = points[(i + 1) % 6];
+
+                                if (start.1 <= y as f32 && end.1 > y as f32)
+                                    || (end.1 <= y as f32 && start.1 > y as f32)
+                                {
+                                    let x = if start.1 == end.1 {
+                                        start.0
+                                    } else {
+                                        start.0
+                                            + (y as f32 - start.1) * (end.0 - start.0)
+                                                / (end.1 - start.1)
+                                    };
+                                    intersections.push(x as i32);
+                                }
+                            }
+
+                            intersections.sort_unstable();
+
+                            for chunk in intersections.chunks(2) {
+                                if chunk.len() == 2 {
+                                    let start_x = chunk[0].max(0).min(RESOLUTION_WIDTH as i32 - 1);
+                                    let end_x = chunk[1].max(0).min(RESOLUTION_WIDTH as i32 - 1);
+
+                                    for x in start_x..=end_x {
+                                        let index =
+                                            (y as usize * RESOLUTION_WIDTH + x as usize) * 3;
+                                        self_data[index..index + 3].copy_from_slice(&message.color);
+                                    }
                                 }
                             }
                         }
