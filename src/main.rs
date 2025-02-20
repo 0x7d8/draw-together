@@ -29,10 +29,10 @@ async fn main() {
     let data = Arc::new(Mutex::new(
         data::Data::new(
             match Path::new("history_2.raw").exists() {
-                true => Some("history_2.raw"),
+                true => Some("history_2.raw".to_string()),
                 false => match nosave {
                     true => None,
-                    false => Some("history_2.raw"),
+                    false => Some("history_2.raw".to_string()),
                 },
             },
             !nosave,

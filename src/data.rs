@@ -1,6 +1,6 @@
-use std::sync::Arc;
+use std::{path::Path, sync::Arc};
 use tokio::{
-    fs::{File, OpenOptions},
+    fs::File,
     io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt},
     sync::Mutex,
 };
@@ -136,57 +136,53 @@ pub struct Data {
 }
 
 impl Data {
-    pub async fn new(path: Option<&str>, save: bool) -> Self {
-        let mut file = match path {
-            Some(path) => Some(if save {
-                OpenOptions::new()
-                    .read(true)
-                    .write(true)
-                    .create(true)
-                    .truncate(true)
-                    .open(path)
-                    .await
-                    .unwrap()
-            } else {
-                File::open(path).await.unwrap()
-            }),
+    pub async fn new(path: Option<String>, save: bool) -> Self {
+        let mut file = match path.clone() {
+            Some(path) => match Path::new(&path).exists() {
+                true => Some(File::open(path).await.unwrap()),
+                false => None,
+            },
             None => None,
         };
 
         let mut data: Vec<u8> = vec![0xff; RESOLUTION * 3];
         if file.is_some() {
+            data.clear();
             file.as_mut().unwrap().read_to_end(&mut data).await.unwrap();
         }
 
+        drop(file);
+
         let data = Arc::new(Mutex::new(data));
         let task_data = Arc::clone(&data);
-        if file.is_some() && save {
-            tokio::spawn(async move {
-                #[allow(clippy::unnecessary_unwrap)]
-                let mut file = file.unwrap();
+        if let Some(path) = path {
+            if save {
+                tokio::spawn(async move {
+                    let mut file = File::options()
+                        .write(true)
+                        .truncate(true)
+                        .create(true)
+                        .open(path)
+                        .await
+                        .unwrap();
 
-                loop {
-                    tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+                    loop {
+                        tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
 
-                    println!("saving data...");
+                        println!("saving data...");
 
-                    file.seek(std::io::SeekFrom::Start(0)).await.unwrap();
+                        file.seek(tokio::io::SeekFrom::Start(0)).await.unwrap();
 
-                    let data = task_data.lock().await;
-                    file.write_all(
-                        &data
-                            .iter()
-                            .flat_map(|data| data.to_le_bytes())
-                            .collect::<Vec<u8>>(),
-                    )
-                    .await
-                    .unwrap();
+                        let data = task_data.lock().await;
+                        file.write_all(&data).await.unwrap();
 
-                    println!("saving data... done");
+                        drop(data);
+                        file.sync_all().await.unwrap();
 
-                    file.sync_all().await.unwrap();
-                }
-            });
+                        println!("saving data... done");
+                    }
+                });
+            }
         }
 
         Self {
@@ -231,7 +227,7 @@ impl Data {
                 }
                 Action::DrawCubeNormal => {
                     let height = message.height as usize * 4;
-                    println!("height: {}", height);
+
                     let start_x = message.x as usize;
                     let end_x =
                         ((message.x + height as u16).min(RESOLUTION_WIDTH as u16 - 1)) as usize;
@@ -249,6 +245,7 @@ impl Data {
                 }
                 Action::DrawCubeHollow => {
                     let height = message.height as usize * 4;
+
                     let start_x = message.x as usize;
                     let end_x =
                         ((message.x + height as u16).min(RESOLUTION_WIDTH as u16 - 1)) as usize;
@@ -343,9 +340,11 @@ impl Data {
             let mut encoded = Vec::with_capacity(7 * data.len());
             encoded.extend(data.iter().flat_map(|msg| msg.encode()));
 
-            self.listeners.retain(|listener| !listener.is_closed());
-
             for listener in &self.listeners {
+                if listener.is_closed() {
+                    continue;
+                }
+
                 listener.send(encoded.clone()).await.unwrap();
             }
         }
