@@ -52,7 +52,8 @@ async fn main() {
 
                 let data = data.data.as_ref().lock().await;
                 let body = Body::from(
-                    data.clone().iter()
+                    data.clone()
+                        .iter()
                         .flat_map(|x| x.to_le_bytes().to_vec())
                         .collect::<Vec<u8>>(),
                 );
