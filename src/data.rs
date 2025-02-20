@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use tokio::{
     fs::{File, OpenOptions},
-    io::{AsyncReadExt, AsyncWriteExt},
+    io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt},
     sync::Mutex,
 };
 
@@ -169,7 +169,9 @@ impl Data {
             None => None,
         };
 
-        let mut data: Vec<u32>;
+        let mut data: Vec<u32> = Vec::with_capacity(RESOLUTION);
+        data.resize(RESOLUTION, 0);
+
         if file.is_some() {
             let mut file_data: Vec<u8> = Vec::with_capacity(RESOLUTION * 4);
             file.as_mut()
@@ -178,21 +180,11 @@ impl Data {
                 .await
                 .unwrap();
 
-            data = file_data
-                .chunks_exact(4)
-                .map(|chunk| {
-                    let mut buf = [0; 4];
-                    buf.copy_from_slice(chunk);
-
-                    u32::from_le_bytes(buf)
-                })
-                .collect::<Vec<u32>>();
-            data.resize(RESOLUTION, 0);
-        } else {
-            data = Vec::with_capacity(RESOLUTION);
-            data.resize(RESOLUTION, 0);
-
-            println!("data: {:?}", &data.len());
+            data.iter_mut()
+                .zip(file_data.chunks_exact(4))
+                .for_each(|(data, chunk)| {
+                    *data = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+                });
         }
 
         let data = Arc::new(Mutex::new(data));
@@ -206,10 +198,18 @@ impl Data {
 
                     println!("saving data...");
 
+                    file.seek(std::io::SeekFrom::Start(0)).await.unwrap();
+
                     let data = task_data.lock().await;
-                    for chunk in data.iter() {
-                        file.write_all(&chunk.to_le_bytes()).await.unwrap();
-                    }
+                    file.write_all(
+                        &data
+                            .iter()
+                            .map(|data| data.to_le_bytes())
+                            .flatten()
+                            .collect::<Vec<u8>>(),
+                    )
+                    .await
+                    .unwrap();
 
                     println!("saving data... done");
 
