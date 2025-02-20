@@ -253,18 +253,35 @@ impl Data {
                     let end_y =
                         ((message.y + height as u16).min(RESOLUTION_HEIGHT as u16 - 1)) as usize;
 
-                    for x in start_x..=end_x {
-                        let top_index = start_y * RESOLUTION_WIDTH * 3 + x * 3;
-                        let bottom_index = end_y * RESOLUTION_WIDTH * 3 + x * 3;
-                        self_data[top_index..top_index + 3].copy_from_slice(&message.color);
-                        self_data[bottom_index..bottom_index + 3].copy_from_slice(&message.color);
+                    for offset in 0..2 {
+                        for x in start_x..=end_x {
+                            if (start_y + offset) < RESOLUTION_HEIGHT {
+                                let top_index = (start_y + offset) * RESOLUTION_WIDTH * 3 + x * 3;
+                                self_data[top_index..top_index + 3].copy_from_slice(&message.color);
+                            }
+
+                            if (end_y + offset) < RESOLUTION_HEIGHT {
+                                let bottom_index = (end_y + offset) * RESOLUTION_WIDTH * 3 + x * 3;
+                                self_data[bottom_index..bottom_index + 3]
+                                    .copy_from_slice(&message.color);
+                            }
+                        }
                     }
 
-                    for y in start_y..=end_y {
-                        let left_index = y * RESOLUTION_WIDTH * 3 + start_x * 3;
-                        let right_index = y * RESOLUTION_WIDTH * 3 + end_x * 3;
-                        self_data[left_index..left_index + 3].copy_from_slice(&message.color);
-                        self_data[right_index..right_index + 3].copy_from_slice(&message.color);
+                    for offset in 0..2 {
+                        for y in start_y..=end_y {
+                            if (start_x + offset) < RESOLUTION_WIDTH {
+                                let left_index = y * RESOLUTION_WIDTH * 3 + (start_x + offset) * 3;
+                                self_data[left_index..left_index + 3]
+                                    .copy_from_slice(&message.color);
+                            }
+
+                            if (end_x + offset) < RESOLUTION_WIDTH {
+                                let right_index = y * RESOLUTION_WIDTH * 3 + (end_x + offset) * 3;
+                                self_data[right_index..right_index + 3]
+                                    .copy_from_slice(&message.color);
+                            }
+                        }
                     }
                 }
                 Action::DrawCircleNormal | Action::DrawCircleHollow => {
@@ -281,20 +298,40 @@ impl Data {
                     let center_x = message.x as f32;
                     let center_y = message.y as f32;
                     let radius_sq = (radius * radius) as f32;
-                    let inner_radius_sq = ((radius - 1) * (radius - 1)) as f32;
 
-                    for y in start_y..=end_y {
-                        let dy = y as f32 - center_y;
-                        let dy_sq = dy * dy;
-                        let row_start = y * RESOLUTION_WIDTH * 3;
+                    if is_hollow {
+                        let outer_radius_sq = radius_sq;
+                        let inner_radius_sq = ((radius - 2) * (radius - 2)) as f32;
 
-                        for x in start_x..=end_x {
-                            let dx = x as f32 - center_x;
-                            let dist_sq = dx * dx + dy_sq;
+                        for y in start_y..=end_y {
+                            let dy = y as f32 - center_y;
+                            let dy_sq = dy * dy;
+                            let row_start = y * RESOLUTION_WIDTH * 3;
 
-                            if (dist_sq >= inner_radius_sq || !is_hollow) && dist_sq <= radius_sq {
-                                let index = row_start + x * 3;
-                                self_data[index..index + 3].copy_from_slice(&message.color);
+                            for x in start_x..=end_x {
+                                let dx = x as f32 - center_x;
+                                let dist_sq = dx * dx + dy_sq;
+
+                                if dist_sq <= outer_radius_sq && dist_sq >= inner_radius_sq {
+                                    let index = row_start + x * 3;
+                                    self_data[index..index + 3].copy_from_slice(&message.color);
+                                }
+                            }
+                        }
+                    } else {
+                        for y in start_y..=end_y {
+                            let dy = y as f32 - center_y;
+                            let dy_sq = dy * dy;
+                            let row_start = y * RESOLUTION_WIDTH * 3;
+
+                            for x in start_x..=end_x {
+                                let dx = x as f32 - center_x;
+                                let dist_sq = dx * dx + dy_sq;
+
+                                if dist_sq <= radius_sq {
+                                    let index = row_start + x * 3;
+                                    self_data[index..index + 3].copy_from_slice(&message.color);
+                                }
                             }
                         }
                     }
