@@ -209,7 +209,7 @@ impl Data {
                         let row_start = y * RESOLUTION_WIDTH * 3;
                         for x in start_x..=end_x {
                             let index = row_start + x * 3;
-                            self_data[index..index + 3].copy_from_slice(&message.color);
+                            self_data[index..index + 3].copy_from_slice(&[0, 0, 0]);
                         }
                     }
                 }
