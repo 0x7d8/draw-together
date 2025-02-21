@@ -391,7 +391,7 @@ impl Data {
                         let max_y = points.iter().map(|(_, y)| *y as i32).max().unwrap();
 
                         for y in min_y..=max_y {
-                            let mut intersections = Vec::new();
+                            let mut intersections = Vec::with_capacity(6);
 
                             for i in 0..6 {
                                 let start = points[i];
