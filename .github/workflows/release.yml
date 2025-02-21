@@ -5,9 +5,9 @@ on:
       - main
 
 env:
-  BIN_NAME: mcvcli
-  PROJECT_NAME: mcvcli
-  REPO_NAME: mcjars/mcvcli
+  BIN_NAME: draw-together
+  PROJECT_NAME: draw-together
+  REPO_NAME: 0x7d8/draw-together
 
 jobs:
   dist:
