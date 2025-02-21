@@ -198,10 +198,10 @@ impl Data {
                 Action::Erase => {
                     let height = (message.height as f64) * 1.5;
 
-                    let start_x = message.x.saturating_sub(height as u16) as usize;
+                    let start_x = message.x as usize;
                     let end_x =
                         ((message.x + height as u16).min(RESOLUTION_WIDTH as u16 - 1)) as usize;
-                    let start_y = message.y.saturating_sub(height as u16) as usize;
+                    let start_y = message.y as usize;
                     let end_y =
                         ((message.y + height as u16).min(RESOLUTION_HEIGHT as u16 - 1)) as usize;
 
@@ -209,9 +209,7 @@ impl Data {
                         let row_start = y * RESOLUTION_WIDTH * 3;
                         for x in start_x..=end_x {
                             let index = row_start + x * 3;
-                            self_data[index] = 0xff;
-                            self_data[index + 1] = 0xff;
-                            self_data[index + 2] = 0xff;
+                            self_data[index..index + 3].copy_from_slice(&message.color);
                         }
                     }
                 }
