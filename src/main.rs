@@ -1,17 +1,17 @@
 mod data;
 
 use axum::{
+    Router,
     body::{Body, Bytes},
     extract::{
-        ws::{Message, WebSocketUpgrade},
         ConnectInfo, State,
+        ws::{Message, WebSocketUpgrade},
     },
     http::HeaderMap,
     response::Response,
     routing::{any, get},
-    Router,
 };
-use futures_util::{stream::StreamExt, SinkExt};
+use futures_util::{SinkExt, stream::StreamExt};
 use std::{net::SocketAddr, path::Path, sync::Arc};
 use tokio::sync::Mutex;
 

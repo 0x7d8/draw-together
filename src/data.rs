@@ -135,7 +135,7 @@ impl Data {
             None => None,
         };
 
-        let mut data: Vec<u8> = vec![0xff; RESOLUTION * 3];
+        let mut data: Vec<u8> = vec![0xFF; RESOLUTION * 3];
         if file.is_some() {
             data.clear();
             file.as_mut().unwrap().read_to_end(&mut data).await.unwrap();
@@ -209,7 +209,7 @@ impl Data {
                         let row_start = y * RESOLUTION_WIDTH * 3;
                         for x in start_x..=end_x {
                             let index = row_start + x * 3;
-                            self_data[index..index + 3].copy_from_slice(&[0xff, 0xff, 0xff]);
+                            self_data[index..index + 3].copy_from_slice(&[0xFF, 0xFF, 0xFF]);
                         }
                     }
                 }
