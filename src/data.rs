@@ -2,7 +2,7 @@ use std::{path::Path, sync::Arc};
 use tokio::{
     fs::File,
     io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt},
-    sync::Mutex,
+    sync::RwLock,
 };
 
 #[derive(Debug)]
@@ -121,7 +121,7 @@ impl ClientMessage {
 }
 
 pub struct Data {
-    pub data: Arc<Mutex<Vec<u8>>>,
+    pub data: Arc<RwLock<Vec<u8>>>,
     pub listeners: Vec<tokio::sync::mpsc::Sender<Vec<u8>>>,
 }
 
@@ -143,10 +143,11 @@ impl Data {
 
         drop(file);
 
-        let data = Arc::new(Mutex::new(data));
-        let task_data = Arc::clone(&data);
+        let data = Arc::new(RwLock::new(data));
         if let Some(path) = path {
             if save {
+                let task_data = Arc::clone(&data);
+
                 tokio::spawn(async move {
                     let mut file = File::options()
                         .write(true)
@@ -163,7 +164,7 @@ impl Data {
 
                         file.seek(tokio::io::SeekFrom::Start(0)).await.unwrap();
 
-                        let data = task_data.lock().await;
+                        let data = task_data.read().await;
                         file.write_all(&data).await.unwrap();
 
                         drop(data);
@@ -191,7 +192,7 @@ impl Data {
 
     pub async fn write(&mut self, data: &[ClientMessage]) {
         let self_data = Arc::clone(&self.data);
-        let mut self_data = self_data.lock().await;
+        let mut self_data = self_data.write().await;
 
         for message in data {
             match message.action {

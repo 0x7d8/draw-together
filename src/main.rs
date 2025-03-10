@@ -50,7 +50,7 @@ async fn main() {
 
                 headers.insert("Content-Type", "robert/history-2".parse().unwrap());
 
-                let data = data.data.as_ref().lock().await;
+                let data = data.data.read().await;
                 let body = Body::from(data.clone());
 
                 (headers, body)
