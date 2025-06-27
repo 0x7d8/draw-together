@@ -69,7 +69,7 @@ async fn main() {
         )
         .with_state(data);
 
-    let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port))
+    let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}"))
         .await
         .unwrap();
 
@@ -97,7 +97,7 @@ async fn handle_ws(
     data: State<Arc<Mutex<data::Data>>>,
     ConnectInfo(who): ConnectInfo<SocketAddr>,
 ) -> Response {
-    println!("{} connected to ws", who);
+    println!("{who} connected to ws");
 
     let data = Arc::clone(&data);
 
@@ -175,7 +175,7 @@ async fn handle_ws(
         writer.await.unwrap_or_default();
         pinger.await.unwrap_or_default();
 
-        println!("{} disconnected", who);
+        println!("{who} disconnected");
 
         reader.abort();
         data.lock().await.sync_listeners();
